@@ -2,7 +2,7 @@
 
 状态：**v1 管理通道已实现**
 用户：平台管理员、应用开发者、联邦运维人员  
-首要问题：**当前注册了哪些应用，每个应用有哪些 Federation 和站点，联邦通道现在是否正常。**
+首要问题：**整个平台如何工作；当前注册了哪些应用，每个应用有哪些 Federation 和站点，联邦通道是否正常。**
 
 ---
 
@@ -34,7 +34,8 @@ WebSocket。development 通过 `FEDPLAT_ADMIN_AUTH_DISABLED=true` 免登录；pr
 
 ```text
 Federation Console
-├─ Applications                         默认首页
+├─ Platform Overview                    默认首页；平台架构与端到端联邦流程
+├─ Applications
 │  └─ Application Detail
 │     ├─ Overview                       Agent、Manifest、联邦拓扑
 │     ├─ Artifacts                      Submission 与 Artifact
@@ -45,37 +46,32 @@ Federation Console
 ```
 
 v1 不做独立的“插件市场”和“AI Dashboard”。插件配置等插件契约冻结后再进入应用设置；
-首页只回答注册关系和运行状态，不堆没有行动价值的 KPI 卡片。
+概览页解释稳定的平台边界与数据流，不展示虚构 KPI。
 
 ---
 
-## 3. 默认首页：Applications
+## 3. 默认首页：Platform Overview
 
 ```text
-┌──────────────────┬────────────────────────────────────────────────────────┐
-│ FEDERATION       │ Applications                              [注册应用]   │
-│                  │ 8 applications · 21 sites                              │
-│ ● Applications   │                                                        │
-│   Sites          │ [搜索 app_id / 名称] [状态] [刷新]                     │
-│   Activity       │                                                        │
-│                  │ APPLICATION       AGENT     FEDERATIONS  SITES  ATTENTION│
-│                  │ Research Agent    Idle      2            5      —       │
-│                  │ com.acme.research manual    main + 1                    │
-│                  │                                                        │
-│                  │ Model Trainer     Running   1            3      1 failed│
-│                  │ com.acme.trainer  fedavg     main                        │
-└──────────────────┴────────────────────────────────────────────────────────┘
+Application A/B/N
+       │ register：每应用创建独立 Agent 上下文
+       ▼
+┌──────────────── FEDERATION CONTROL PLANE ────────────────┐
+│ Registry & Contract → AppFederationAgent → Plugin Slots │
+│                                → Artifact & Release      │
+│ PostgreSQL：关系/状态/审计   S3：Artifact 内容           │
+└─────────────────────────┬────────────────────────────────┘
+            inbound ↑ Adapter Protocol ↓ outbound
+                         Site A/B/N
 ```
 
-每行显示：
+概览页回答三个问题：
 
-- 应用名称、`app_id`、注册版本；
-- AppFederationAgent 状态和当前 Agent Core；
-- Federation 数量、去重后的成员站点数量；
-- 最近一次联邦活动；
-- 失败的 Job/Delivery 数量。只有异常才强调颜色。
+- 平台与应用的边界：应用声明 Artifact/Task 契约，平台提供联邦通道；
+- 隔离边界：每个应用拥有自己的 Agent 上下文，数据限定在 `app_id + federation_id`；
+- 一次交换的完整路径：提交、收集、存储、联邦、分发、确认。
 
-点击整行进入应用详情。筛选和分页由服务端完成，URL 保留查询条件，页面可复制和刷新。
+概览不请求业务数据，也不混入实时运行指标。应用目录移到 `/apps`，负责查询、注册及进入应用详情。
 
 ---
 
@@ -203,28 +199,37 @@ GET /admin/v1/activity
 
 ## 9. 视觉与交互原则
 
-- 方向：浅色“协议控制台”，不是深色赛博大屏；信息密度高，但不拥挤。
-- 主色：墨色文字 `#172528`、雾灰背景 `#F3F6F6`、白色面板、青绿色动作色 `#087C75`。
+- 方向：Linear 风格的深色协议控制台；克制、结构清晰、信息密度高。
+- 主色：近黑背景 `#08090A`、分层深色面板、紫色动作色 `#5E6AD2`。
 - 状态色：琥珀表示等待/延迟，红色表示失败；正常状态不过度铺绿色。
-- 字体：`IBM Plex Sans / PingFang SC`；ID、digest、版本使用 `IBM Plex Mono`。
-- 形状：6px 圆角、细边框、无渐变；拓扑连接线是界面的识别元素。
+- 字体：自托管 Geist Sans；ID、digest、版本使用 Geist Mono。
+- 形状：6/12px 圆角、细边框、轻量层次；拓扑和架构连接线是识别元素。
 - 桌面优先，最小支持 1024px；窄屏将侧栏折叠，表格允许横向滚动。
 - 键盘可操作、焦点可见、颜色对比满足 WCAG AA；状态不能只通过颜色表达。
 - 时间同时提供相对时间和完整时间 tooltip；ID 可一键复制。
 
 ---
 
-## 10. v1 页面与验收
+## 10. 设计与实现来源
+
+- [ConardLi/garden-skills](https://github.com/ConardLi/garden-skills) 的 `web-design-engineer`：用于设计审查流程、Linear 视觉方向和交付检查；只作为开发方法，不是运行时依赖。
+- [Vercel Geist](https://vercel.com/font)：控制台的 Sans/Mono 字体；通过 Fontsource 包随前端构建，自托管、不依赖外部字体 CDN。
+- React + Vite：延续仓库既有前端栈。架构图使用语义化 React 和 CSS 手写，没有引入 UI、图表或流程图库。
+
+---
+
+## 11. v1 页面与验收
 
 v1 管理通道交付以下视图：
 
-1. Application List；
-2. Application Overview；
-3. Application Artifacts；
-4. Application Releases；
-5. Application Contract；
-6. Site List；
-7. Activity。
+1. Platform Overview；
+2. Application List；
+3. Application Overview；
+4. Application Artifacts；
+5. Application Releases；
+6. Application Contract；
+7. Site List；
+8. Activity。
 
 注册应用、建 Federation、添加 Site/Membership、手工 Release 和 rollback 使用同页表单或对话框，
 不为每个动作单建页面。

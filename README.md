@@ -23,7 +23,7 @@
 - 不可变 Release、站点 Delivery、stage/activate/rollback Command 与 Ack；
 - PostgreSQL `SKIP LOCKED` Agent Worker；
 - Application、拓扑、工件、发布、站点和活动管理 API；
-- 可独立部署的 React 管理控制台。
+- 可独立部署的 React 管理控制台，包含平台架构概览、应用、站点和活动视图。
 
 旧 SQLite `Update / Digest / Plugin` spike 已删除，不提供兼容接口。具体 Agent Core、联邦算法与 Artifact Handler 插件仍只保留协议位置，等第一个真实应用确定语义后再实现。
 

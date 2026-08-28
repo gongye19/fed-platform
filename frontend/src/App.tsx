@@ -120,7 +120,7 @@ function usePath() {
   const navigate = (next: string) => {
     window.history.pushState({}, "", next);
     setPath(next);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0 });
   };
   return { path, navigate };
 }
@@ -188,28 +188,116 @@ function Shell({ path, navigate }: {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <button className="brand" onClick={() => navigate("/")}><span className="brand__signal" />FEDERATION</button>
-        <p className="sidebar__label">Control plane</p>
+        <button className="brand" onClick={() => navigate("/")}><strong>FED</strong><span>Control Plane</span></button>
+        <p className="sidebar__label">Federation workspace</p>
         <nav aria-label="主导航">
-          <button className={path === "/" || appMatch ? "active" : ""} onClick={() => navigate("/")}><span>01</span>应用</button>
-          <button className={path === "/sites" ? "active" : ""} onClick={() => navigate("/sites")}><span>02</span>站点</button>
-          <button className={path === "/activity" ? "active" : ""} onClick={() => navigate("/activity")}><span>03</span>活动</button>
+          <button className={path === "/" ? "active" : ""} onClick={() => navigate("/")}>概览</button>
+          <button className={path === "/apps" || appMatch ? "active" : ""} onClick={() => navigate("/apps")}>应用</button>
+          <button className={path === "/sites" ? "active" : ""} onClick={() => navigate("/sites")}>站点</button>
+          <button className={path === "/activity" ? "active" : ""} onClick={() => navigate("/activity")}>活动</button>
         </nav>
         <div className="sidebar__foot">
           <span className="connection"><i />API 已连接</span>
+          <span className="environment">Development</span>
         </div>
       </aside>
       <main className="content">
-        {appMatch ? (
+        {path === "/" ? (
+          <LandingPage navigate={navigate} />
+        ) : appMatch ? (
           <ApplicationDetail appId={decodeURIComponent(appMatch[1])} navigate={navigate} />
+        ) : path === "/apps" ? (
+          <ApplicationsPage navigate={navigate} />
         ) : path === "/sites" ? (
           <SitesPage />
         ) : path === "/activity" ? (
           <ActivityPage />
         ) : (
-          <ApplicationsPage navigate={navigate} />
+          <LandingPage navigate={navigate} />
         )}
       </main>
+    </div>
+  );
+}
+
+function LandingPage({ navigate }: { navigate: (path: string) => void }) {
+  const steps = [
+    ["01", "提交", "站点按应用契约上传 Artifact"],
+    ["02", "收集", "校验类型、格式、digest 与权限"],
+    ["03", "存储", "元数据进 PostgreSQL，内容进对象存储"],
+    ["04", "联邦", "每应用 Agent 调用已绑定的插件策略"],
+    ["05", "分发", "创建 Release 与逐站点 Delivery"],
+    ["06", "确认", "站点 stage / activate 并返回 Ack"],
+  ];
+  return (
+    <div className="landing">
+      <section className="landing__hero" aria-labelledby="platform-title">
+        <div className="landing__intro">
+          <p className="landing__kicker">Federated application infrastructure</p>
+          <h1 id="platform-title">在一套联邦通道上，运行不同应用的站点网络。</h1>
+          <p>每个新应用注册后获得独立的 AppFederationAgent。应用声明自己能交换什么，平台负责跨站点收集、保存、联邦处理、版本化分发与确认。</p>
+          <div className="landing__actions">
+            <button className="button button--primary" onClick={() => navigate("/apps")}>进入应用管理</button>
+            <a className="button button--quiet" href="#platform-architecture">查看平台架构</a>
+          </div>
+        </div>
+        <dl className="landing__principles">
+          <div><dt>Application scoped</dt><dd>应用之间数据、Agent 与 Federation 相互隔离</dd></div>
+          <div><dt>Artifact agnostic</dt><dd>Memory、Skill、模型权重及未来类型均由契约声明</dd></div>
+          <div><dt>Protocol driven</dt><dd>站点只依赖稳定 Adapter API，不绑定部署平台</dd></div>
+        </dl>
+      </section>
+
+      <section className="architecture" id="platform-architecture" aria-labelledby="architecture-title">
+        <header className="architecture__header">
+          <div><p className="eyebrow">Platform architecture</p><h2 id="architecture-title">一个控制面，多条应用级联邦通道</h2></div>
+          <p>平台统一基础设施，但所有联邦数据始终限定在 <code>app_id + federation_id</code> 范围内。</p>
+        </header>
+
+        <div className="architecture__map">
+          <div className="architecture__layer architecture__layer--apps">
+            <span className="architecture__label">APPLICATION LAYER</span>
+            <div className="architecture__nodes">
+              <article><small>APPLICATION A</small><strong>Agent 应用</strong><code>memory / skill</code></article>
+              <article><small>APPLICATION B</small><strong>训练应用</strong><code>model weights</code></article>
+              <article><small>APPLICATION N</small><strong>未来应用</strong><code>declared artifact</code></article>
+            </div>
+          </div>
+
+          <div className="architecture__bridge"><span>REGISTER</span><i /><strong>每个应用创建独立 Agent 上下文</strong><i /><span>ISOLATE</span></div>
+
+          <div className="architecture__layer architecture__layer--control">
+            <span className="architecture__label">FEDERATION CONTROL PLANE</span>
+            <div className="architecture__control-grid">
+              <article><small>01</small><strong>Registry & Contract</strong><p>Manifest、ArtifactType、TaskType</p></article>
+              <article className="architecture__agent"><small>02 · PER APPLICATION</small><strong>AppFederationAgent</strong><p>Federation、Membership、Job</p></article>
+              <article><small>03 · PLUGIN SLOTS</small><strong>Federation Strategy</strong><p>算法与 Handler 按应用绑定</p></article>
+              <article><small>04</small><strong>Artifact & Release</strong><p>对象、版本、Delivery、Audit</p></article>
+            </div>
+            <div className="architecture__storage"><span>POSTGRESQL</span><i />关系、状态、审计<i /><span>S3-COMPATIBLE</span><i />Artifact 内容</div>
+          </div>
+
+          <div className="architecture__exchange" aria-label="站点与平台之间的双向通道">
+            <div><span>INBOUND</span><strong>Artifact / Event / Task Result</strong><b>↑</b></div>
+            <p>Adapter Protocol</p>
+            <div><b>↓</b><strong>Release / Command / Artifact URL</strong><span>OUTBOUND</span></div>
+          </div>
+
+          <div className="architecture__layer architecture__layer--sites">
+            <span className="architecture__label">SITE NETWORK · MEMBERSHIP PER APPLICATION</span>
+            <div className="architecture__nodes architecture__nodes--sites">
+              <article><small>SITE A</small><strong>Federation Node</strong><code>submit / receive</code></article>
+              <article><small>SITE B</small><strong>Federation Node</strong><code>submit / receive / execute</code></article>
+              <article><small>SITE N</small><strong>Federation Node</strong><code>receive</code></article>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="protocol-flow" aria-labelledby="protocol-title">
+        <header><p className="eyebrow">End-to-end channel</p><h2 id="protocol-title">一次联邦交换如何完成</h2></header>
+        <ol>{steps.map(([number, title, detail]) => <li key={number}><span>{number}</span><strong>{title}</strong><p>{detail}</p></li>)}</ol>
+      </section>
     </div>
   );
 }
@@ -432,7 +520,7 @@ function ApplicationDetail({ appId, navigate }: { appId: string; navigate: (path
   if (!topology) return <><PageHeader eyebrow="Registry / Application" title={appId} meta="正在加载应用拓扑…" />{error && <ErrorMessage error={error} />}</>;
   const app = topology.application;
   return <>
-    <button className="back" onClick={() => navigate("/")}>← 返回应用列表</button>
+    <button className="back" onClick={() => navigate("/apps")}>← 返回应用列表</button>
     <PageHeader eyebrow="Application / Topology" title={app.display_name} meta={`${app.app_id} · v${app.current_version}`} action={<div className="header-actions"><button className="button button--quiet" onClick={() => setMembershipModal(true)} disabled={!topology.federations.length || !sites.length}>配置成员</button><button className="button button--primary" onClick={() => setFederationModal(true)}>新建 Federation</button></div>} />
     <div className="app-state"><Status value={app.status} /><span>Agent</span><Status value={app.agent_status} /><code>{app.core_plugin_id}</code></div>
     {error && <ErrorMessage error={error} />}{notice && <p className="message message--success" role="status">{notice}<button onClick={() => setNotice("")} aria-label="关闭提示">×</button></p>}
