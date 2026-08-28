@@ -66,17 +66,21 @@ type DiagramNode = PlatformNode | LayerNode;
 function PlatformDiagramNode({ data, selected }: NodeProps<PlatformNode>) {
   return (
     <div className={`flow-node${selected ? " selected" : ""}`}>
-      <Handle id="top" type="target" position={Position.Top} style={{ left: "44%" }} />
-      <Handle id="top-out" type="source" position={Position.Top} style={{ left: "56%" }} />
+      <Handle id="top" type="target" position={Position.Top} />
+      <Handle id="top-down" type="target" position={Position.Top} style={{ left: "44%" }} />
+      <Handle id="top-up" type="source" position={Position.Top} style={{ left: "56%" }} />
       <Handle id="left" type="target" position={Position.Left} />
       <span className="flow-node__copy"><strong>{data.title}</strong><small>{data.subtitle}</small></span>
       <Handle id="bottom" type="source" position={Position.Bottom} />
-      <Handle id="bottom-left" type="source" position={Position.Bottom} style={{ left: "18%" }} />
-      <Handle id="bottom-center" type="source" position={Position.Bottom} style={{ left: "50%" }} />
-      <Handle id="bottom-right" type="source" position={Position.Bottom} style={{ left: "82%" }} />
-      <Handle id="bottom-left-in" type="target" position={Position.Bottom} style={{ left: "24%" }} />
-      <Handle id="bottom-center-in" type="target" position={Position.Bottom} style={{ left: "56%" }} />
-      <Handle id="bottom-right-in" type="target" position={Position.Bottom} style={{ left: "88%" }} />
+      <Handle id="bottom-app-left" type="source" position={Position.Bottom} style={{ left: "15.91%" }} />
+      <Handle id="bottom-app-center" type="source" position={Position.Bottom} style={{ left: "50%" }} />
+      <Handle id="bottom-app-right" type="source" position={Position.Bottom} style={{ left: "84.09%" }} />
+      <Handle id="bottom-site-left" type="source" position={Position.Bottom} style={{ left: "15.33%" }} />
+      <Handle id="bottom-site-center" type="source" position={Position.Bottom} style={{ left: "48.67%" }} />
+      <Handle id="bottom-site-right" type="source" position={Position.Bottom} style={{ left: "82%" }} />
+      <Handle id="bottom-site-left-in" type="target" position={Position.Bottom} style={{ left: "19.19%" }} />
+      <Handle id="bottom-site-center-in" type="target" position={Position.Bottom} style={{ left: "52.52%" }} />
+      <Handle id="bottom-site-right-in" type="target" position={Position.Bottom} style={{ left: "85.86%" }} />
       <Handle id="right" type="source" position={Position.Right} />
     </div>
   );
@@ -85,8 +89,7 @@ function PlatformDiagramNode({ data, selected }: NodeProps<PlatformNode>) {
 function DiagramLayerNode({ data }: NodeProps<LayerNode>) {
   return (
     <div className={`flow-layer flow-layer--${data.tone}`}>
-      <strong>{data.title}</strong>
-      <span>{data.subtitle}</span>
+      <div className="flow-layer__header"><strong>{data.title}</strong><span>{data.subtitle}</span></div>
     </div>
   );
 }
@@ -94,14 +97,14 @@ function DiagramLayerNode({ data }: NodeProps<LayerNode>) {
 const nodeTypes: NodeTypes = { platform: PlatformDiagramNode, layer: DiagramLayerNode };
 const activeMarker = { type: MarkerType.ArrowClosed, width: 14, height: 14, color: "#7c86ea" } as const;
 
-function verticalEdge(id: string, source: string, target: string, sourceHandle = "bottom"): Edge {
+function verticalEdge(id: string, source: string, target: string, sourceHandle = "bottom", targetHandle = "top"): Edge {
   return {
     id,
     source,
     target,
     sourceHandle,
-    targetHandle: "top",
-    type: "smoothstep",
+    targetHandle,
+    type: "straight",
     animated: true,
     markerEnd: activeMarker,
     style: { stroke: "#7c86ea", strokeWidth: 1.35 },
@@ -113,9 +116,9 @@ function reverseVerticalEdge(id: string, source: string, target: string, targetH
     id,
     source,
     target,
-    sourceHandle: "top-out",
+    sourceHandle: "top-up",
     targetHandle,
-    type: "smoothstep",
+    type: "straight",
     animated: true,
     markerEnd: activeMarker,
     style: { stroke: "#7c86ea", strokeWidth: 1.35 },
@@ -141,9 +144,9 @@ const hierarchyNodes: DiagramNode[] = [
   { id: "layer-platform", type: "layer", position: { x: 0, y: 0 }, data: { title: "00  联邦平台", subtitle: "统一协议与应用注册入口", tone: "platform" }, style: { width: 1200, height: 132 }, selectable: false, focusable: false, draggable: false },
   { id: "layer-app", type: "layer", position: { x: 0, y: 152 }, data: { title: "01  应用层", subtitle: "所有应用都按照平台协议开发", tone: "plain" }, style: { width: 1200, height: 142 }, selectable: false, focusable: false, draggable: false },
   { id: "layer-federation", type: "layer", position: { x: 0, y: 314 }, data: { title: "02  联邦域层", subtitle: "联邦 Agent 运行在所属联邦域内部", tone: "platform" }, style: { width: 1200, height: 230 }, selectable: false, focusable: false, draggable: false },
-  { id: "layer-sites", type: "layer", position: { x: 0, y: 564 }, data: { title: "03  站点层", subtitle: "站点提交内容，并接收联邦处理结果", tone: "sites" }, style: { width: 1200, height: 202 }, selectable: false, focusable: false, draggable: false },
+  { id: "layer-sites", type: "layer", position: { x: 0, y: 564 }, data: { title: "03  站点层", subtitle: "站点提交内容，并接收联邦处理结果", tone: "sites" }, style: { width: 1200, height: 160 }, selectable: false, focusable: false, draggable: false },
 
-  { id: "platform", type: "platform", parentId: "layer-platform", extent: "parent", position: { x: 360, y: 46 }, data: { title: "联邦平台", subtitle: "统一协议 · 注册并管理多个应用", moduleId: "platform" }, style: { width: 480, height: 72 }, ariaLabel: "联邦平台" },
+  { id: "platform", type: "platform", className: "platform-root", parentId: "layer-platform", extent: "parent", position: { x: 72, y: 46 }, data: { title: "联邦平台", subtitle: "统一协议 · 注册并管理多个应用", moduleId: "platform" }, style: { width: 1056, height: 72 }, ariaLabel: "联邦平台" },
 
   ...(["A", "B", "N"] as const).map((suffix, index): PlatformNode => ({
     id: `app-${suffix}`,
@@ -161,9 +164,9 @@ const hierarchyNodes: DiagramNode[] = [
     className: "federation-container",
     parentId: "layer-federation",
     extent: "parent",
-    position: { x: 72 + index * 360, y: 32 },
+    position: { x: 72 + index * 360, y: 52 },
     data: { title: `联邦域 ${suffix}`, subtitle: `组织应用 ${suffix} 的站点协作`, moduleId: "federation" },
-    style: { width: 336, height: 182 },
+    style: { width: 336, height: 162 },
     ariaLabel: `应用 ${suffix} 的联邦域`,
   })),
   ...(["A", "B", "N"] as const).map((suffix): PlatformNode => ({
@@ -171,9 +174,9 @@ const hierarchyNodes: DiagramNode[] = [
     type: "platform",
     parentId: `federation-${suffix}`,
     extent: "parent",
-    position: { x: 28, y: 88 },
+    position: { x: 28, y: 80 },
     data: { title: `应用联邦 Agent ${suffix}`, subtitle: "负责本联邦域的处理", moduleId: "agent" },
-    style: { width: 280, height: 68 },
+    style: { width: 280, height: 62 },
     ariaLabel: `联邦域 ${suffix} 内的 Agent`,
   })),
   ...(["A", "B", "N"] as const).flatMap((app, appIndex) =>
@@ -182,7 +185,7 @@ const hierarchyNodes: DiagramNode[] = [
       type: "platform",
       parentId: "layer-sites",
       extent: "parent",
-      position: { x: 76 + appIndex * 360 + siteIndex * 112, y: 78 },
+      position: { x: 76 + appIndex * 360 + siteIndex * 112, y: 60 },
       data: { title: `站点 ${app}-${site}`, subtitle: `属于应用 ${app}`, moduleId: "site" },
       style: { width: 108, height: 68 },
       ariaLabel: `应用 ${app} 的站点 ${site}`,
@@ -192,11 +195,11 @@ const hierarchyNodes: DiagramNode[] = [
 
 const branchPorts = ["left", "center", "right"] as const;
 const hierarchyEdges: Edge[] = (["A", "B", "N"] as const).flatMap((suffix, appIndex) => [
-  verticalEdge(`platform-app-${suffix}`, "platform", `app-${suffix}`, `bottom-${branchPorts[appIndex]}`),
+  verticalEdge(`platform-app-${suffix}`, "platform", `app-${suffix}`, `bottom-app-${branchPorts[appIndex]}`),
   verticalEdge(`app-federation-${suffix}`, `app-${suffix}`, `federation-${suffix}`),
   ...[1, 2, 3].flatMap((site, siteIndex) => [
-    verticalEdge(`federation-site-${suffix}-${site}`, `federation-${suffix}`, `site-${suffix}-${site}`, `bottom-${branchPorts[siteIndex]}`),
-    reverseVerticalEdge(`site-federation-${suffix}-${site}`, `site-${suffix}-${site}`, `federation-${suffix}`, `bottom-${branchPorts[siteIndex]}-in`),
+    verticalEdge(`federation-site-${suffix}-${site}`, `federation-${suffix}`, `site-${suffix}-${site}`, `bottom-site-${branchPorts[siteIndex]}`, "top-down"),
+    reverseVerticalEdge(`site-federation-${suffix}-${site}`, `site-${suffix}-${site}`, `federation-${suffix}`, `bottom-site-${branchPorts[siteIndex]}-in`),
   ]),
 ]);
 
