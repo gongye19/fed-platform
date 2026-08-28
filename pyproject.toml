@@ -1,0 +1,23 @@
+[project]
+name = "fedplat"
+version = "0.1.0"
+description = "FedAgent platform kernel: protocol, registry, plugin socket"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "pydantic>=2.10",
+    "uvicorn>=0.34",
+]
+
+[project.optional-dependencies]
+dev = ["httpx>=0.28", "pytest>=8.3"]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["fedplat*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
