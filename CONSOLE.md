@@ -1,6 +1,6 @@
 # Federation Console — 管理前端设计
 
-状态：**v1 提案**  
+状态：**v1 管理通道已实现**
 用户：平台管理员、应用开发者、联邦运维人员  
 首要问题：**当前注册了哪些应用，每个应用有哪些 Federation 和站点，联邦通道现在是否正常。**
 
@@ -11,19 +11,20 @@
 ```text
 Browser
   │
-  │ /console/*       HTML / CSS / 少量 JavaScript
+  │ HTTPS
+  ▼
+fed-console（frontend/，React + Vite）
   │ /admin/v1/*      查询与管理动作
   ▼
-FastAPI Control API
-  ├─ Console 页面
-  ├─ Admin API
+fed-api（backend/，FastAPI）
+  ├─ Admin / Site API
   ├─ Registry / Release / Delivery
   └─ PostgreSQL / Object Storage
 ```
 
-v1 不单独部署 Next.js，也不增加 BFF、GraphQL 或 WebSocket 服务。控制台由 FastAPI
-服务端渲染，使用 Jinja2、原生 CSS 和少量 JavaScript；页面和 API 同域，复用管理员认证。
-`/admin/v1` 保持独立契约，以后确实需要复杂交互时可以替换前端，不影响联邦协议。
+控制台和后端分别位于 `frontend/`、`backend/`，在 Railway 是两个可独立监控、构建和发布的服务。
+前端使用 React + Vite，直接调用稳定的 `/admin/v1` 契约；不增加 Next.js、BFF、GraphQL、组件库或
+WebSocket。管理员 Token 只保存在浏览器 `sessionStorage`，后端用精确 CORS origin 授权控制台域名。
 
 控制台只管理平台，不进入各应用自己的业务页面。
 
@@ -38,13 +39,12 @@ Federation Console
 │     ├─ Overview                       Agent、Manifest、联邦拓扑
 │     ├─ Artifacts                      Submission 与 Artifact
 │     ├─ Releases                       Release、各站点 Delivery
-│     └─ Settings                       Manifest 与插件绑定
+│     └─ Contract                       Manifest 与声明能力
 ├─ Sites                                跨应用站点目录
-│  └─ Site Detail                       该站点加入的应用与 Federation
 └─ Activity                             管理操作、任务失败、投递异常
 ```
 
-v1 不做独立的“插件市场”和“AI Dashboard”。插件只在 Application/Federation 的设置中绑定；
+v1 不做独立的“插件市场”和“AI Dashboard”。插件配置等插件契约冻结后再进入应用设置；
 首页只回答注册关系和运行状态，不堆没有行动价值的 KPI 卡片。
 
 ---
@@ -99,7 +99,7 @@ com.acme.research
 │    └─ lab-b             offline  submit / receive                        │
 └──────────────────────────────────────────────────────────────────────────┘
 
-[Overview] [Artifacts] [Releases] [Settings]
+[Topology] [Artifacts] [Releases] [Contract]
 ```
 
 Overview 先展示一棵真实关系树，而不是地理地图：
@@ -112,14 +112,13 @@ Overview 先展示一棵真实关系树，而不是地理地图：
 ### Overview
 
 - Federation 拓扑和成员权限；
-- Agent Core、最近 Job、失败原因；
-- 最近 Submission、Release 和 Delivery 异常；
-- Manifest 中声明的 ArtifactType 与 TaskType。
+- Agent Core 与运行状态；
+- Federation/Site 关系和 submit/receive/execute 权限。
 
 ### Artifacts
 
-按 Federation、ArtifactType、来源站点和时间筛选。表格只显示 digest、类型、大小、来源、状态、
-创建时间和引用关系。默认不渲染工件正文；有权限的管理员需显式点击下载。
+按 Federation 展示 Submission。表格只显示 digest、类型、大小、来源、状态和创建时间，
+默认不渲染工件正文。
 
 ### Releases
 
@@ -134,15 +133,14 @@ pending → staged → active
 管理员可在此创建 manual release、stage、activate 和 rollback。破坏性或批量动作先展示目标站点，
 要求二次确认，并显示操作结果。
 
-### Settings
+### Contract
 
-- 当前 FedApp Manifest revision；
-- Agent Core Plugin 绑定；
-- 各 Federation 的 Algorithm Plugin；
-- 各 ArtifactType 的 Handler Plugin；
-- 配置 revision、修改人和修改时间。
+- 当前 FedApp Manifest；
+- Adapter protocol；
+- ArtifactType 与 TaskType 声明；
+- 原始只读 JSON。
 
-插件配置由后端根据 plugin schema 生成表单并校验；前端不解释插件业务语义。
+插件配置 UI 暂不生成；等第一个真实插件确定 schema 后再加入，不提前设计一套空表单框架。
 
 ---
 
@@ -172,21 +170,15 @@ site-hk-01       online     3             4            24s ago     —
 lab-b            offline    1             1            2h ago      2 pending
 ```
 
-Site Detail 展示：
-
-- Federation Node 版本、最近心跳和凭据轮换状态；
-- 它加入的 Application/Federation 及各自 Membership 权限；
-- 待拉取 Command、最近 Delivery 和失败重试；
-- 审计记录。
-
-这里的跨应用视图只展示注册和健康信息；点击业务对象后必须回到相应 `app_id/federation_id` 上下文。
+当前 Site List 展示 Federation Node 最近连接时间、应用数、Membership 数和待拉取 Command 数。
+跨应用视图只展示注册和健康信息，不 union 业务数据。
 
 ---
 
 ## 7. Activity
 
-Activity 是统一的可筛选事件流：时间、级别、Application、Federation、Site、对象类型、动作和结果。
-默认突出失败的 AgentJob、Task 和 Delivery，同时保留管理员注册、改权限、改插件、发布与回滚记录。
+Activity 是按时间倒序的统一事件流：Application、Federation、Site、对象类型、动作和结果。
+它合并管理员注册、权限、发布操作与站点 Delivery 事件。
 
 不把原始 prompt、工件正文或站点私有数据写入活动流。
 
@@ -198,18 +190,14 @@ Activity 是统一的可筛选事件流：时间、级别、Application、Federa
 
 ```text
 GET /admin/v1/apps
-GET /admin/v1/apps/{app_id}
 GET /admin/v1/apps/{app_id}/topology
-GET /admin/v1/apps/{app_id}/artifacts
-GET /admin/v1/apps/{app_id}/releases
-GET /admin/v1/apps/{app_id}/federations/{federation_id}
+GET /admin/v1/apps/{app_id}/federations/{federation_id}/submissions
+GET /admin/v1/apps/{app_id}/federations/{federation_id}/releases
 GET /admin/v1/sites
-GET /admin/v1/sites/{site_id}
 GET /admin/v1/activity
 ```
 
-所有列表统一使用 `cursor / limit / q / status`；后端返回展示所需的计数和派生状态，前端不自行拼接权限、
-健康度或 Delivery 状态。v1 在页面可见时每 15 秒轮询状态，支持手动刷新；有明确实时需求后再加 SSE。
+后端返回展示所需的计数和 Delivery 状态，前端提供手动刷新；有明确实时需求后再加轮询或 SSE。
 
 ---
 
@@ -228,14 +216,14 @@ GET /admin/v1/activity
 
 ## 10. v1 页面与验收
 
-v1 只交付 7 个页面：
+v1 管理通道交付以下视图：
 
 1. Application List；
 2. Application Overview；
 3. Application Artifacts；
 4. Application Releases；
-5. Federation Detail；
-6. Site List / Detail；
+5. Application Contract；
+6. Site List；
 7. Activity。
 
 注册应用、建 Federation、添加 Site/Membership、手工 Release 和 rollback 使用同页表单或对话框，

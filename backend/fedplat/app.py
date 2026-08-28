@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import secrets
+import uuid
 from functools import lru_cache
 from typing import Annotated, Any
 
@@ -10,14 +12,18 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError, ValidationError as JsonSchemaValidationError
 from pydantic import ValidationError
 from starlette.requests import Request
+from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 
 from fedplat.artifact_store import ArtifactStoreError, S3ArtifactStore
 from fedplat.protocol import (
     ArtifactDescriptor,
+    CommandAck,
+    DeliveryAction,
     FederationRegistration,
     FedAppManifest,
     MembershipSpec,
+    ReleaseCreate,
     SiteRegistration,
     StableId,
     json_digest,
@@ -26,7 +32,18 @@ from fedplat.settings import Settings, get_settings
 from fedplat.store import ConflictError, Database, ForbiddenError, NotFoundError
 
 
-app = FastAPI(title="FedAgent Platform", version="0.2.0")
+app = FastAPI(title="FedAgent Platform", version="0.3.0")
+cors_origins = [
+    origin.strip()
+    for origin in os.environ.get("FEDPLAT_CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_methods=["GET", "POST", "PUT", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
+)
 
 
 @app.middleware("http")
@@ -196,6 +213,22 @@ def register_site(
     return {"site_id": body.site_id, "api_key": api_key}
 
 
+@app.get("/admin/v1/sites", dependencies=[Depends(require_admin)])
+def list_sites(
+    db: Annotated[Database, Depends(get_database)],
+    limit: int = Query(default=100, ge=1, le=100),
+) -> dict[str, Any]:
+    return {"items": db.list_sites(limit)}
+
+
+@app.get("/admin/v1/activity", dependencies=[Depends(require_admin)])
+def list_activity(
+    db: Annotated[Database, Depends(get_database)],
+    limit: int = Query(default=100, ge=1, le=100),
+) -> dict[str, Any]:
+    return {"items": db.list_activity(limit)}
+
+
 @app.post("/admin/v1/apps/{app_id}/federations", dependencies=[Depends(require_admin)])
 def create_federation(
     app_id: StableId,
@@ -241,6 +274,116 @@ def list_submissions(
     limit: int = Query(default=50, ge=1, le=100),
 ) -> dict[str, Any]:
     return {"items": db.list_submissions(app_id, federation_id, limit)}
+
+
+@app.post(
+    "/admin/v1/apps/{app_id}/federations/{federation_id}/releases",
+    status_code=201,
+    dependencies=[Depends(require_admin)],
+)
+def create_release(
+    app_id: StableId,
+    federation_id: StableId,
+    body: ReleaseCreate,
+    db: Annotated[Database, Depends(get_database)],
+) -> dict[str, Any]:
+    try:
+        return db.create_release(
+            app_id, federation_id, body.artifact_digests, body.target_site_ids
+        )
+    except (ConflictError, NotFoundError, ForbiddenError) as exc:
+        map_store_error(exc)
+
+
+@app.get(
+    "/admin/v1/apps/{app_id}/federations/{federation_id}/releases",
+    dependencies=[Depends(require_admin)],
+)
+def list_releases(
+    app_id: StableId,
+    federation_id: StableId,
+    db: Annotated[Database, Depends(get_database)],
+    limit: int = Query(default=50, ge=1, le=100),
+) -> dict[str, Any]:
+    return {"items": db.list_releases(app_id, federation_id, limit)}
+
+
+@app.get(
+    "/admin/v1/apps/{app_id}/federations/{federation_id}/releases/{release_id}",
+    dependencies=[Depends(require_admin)],
+)
+def release_detail(
+    app_id: StableId,
+    federation_id: StableId,
+    release_id: uuid.UUID,
+    db: Annotated[Database, Depends(get_database)],
+) -> dict[str, Any]:
+    try:
+        return db.release_detail(app_id, federation_id, release_id)
+    except (ConflictError, NotFoundError, ForbiddenError) as exc:
+        map_store_error(exc)
+
+
+@app.post(
+    "/admin/v1/apps/{app_id}/federations/{federation_id}/releases/{release_id}/{action}",
+    dependencies=[Depends(require_admin)],
+)
+def request_delivery_action(
+    app_id: StableId,
+    federation_id: StableId,
+    release_id: uuid.UUID,
+    action: str,
+    body: DeliveryAction,
+    db: Annotated[Database, Depends(get_database)],
+) -> dict[str, Any]:
+    if action not in {"stage", "activate", "rollback"}:
+        fail(404, "E_NOT_FOUND", "delivery action not found")
+    try:
+        return {
+            "items": db.create_delivery_commands(
+                app_id, federation_id, release_id, action, body.site_ids
+            )
+        }
+    except (ConflictError, NotFoundError, ForbiddenError) as exc:
+        map_store_error(exc)
+
+
+@app.get("/site/v1/commands")
+def list_site_commands(
+    site_id: Annotated[str, Depends(authenticate_site)],
+    db: Annotated[Database, Depends(get_database)],
+    artifacts: Annotated[S3ArtifactStore, Depends(get_artifact_store)],
+    after: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+) -> dict[str, Any]:
+    items = db.site_commands(site_id, after, limit)
+    for item in items:
+        if item["command_type"] != "release.stage":
+            continue
+        try:
+            artifact_items = db.command_artifacts(item["command_id"])
+            for artifact in artifact_items:
+                artifact["download_url"] = artifacts.download_url(artifact.pop("storage_key"))
+            item["payload"] = {**item["payload"], "artifacts": artifact_items}
+        except ArtifactStoreError as exc:
+            fail(502, "E_ARTIFACT_STORE", str(exc))
+    return {
+        "items": items,
+        "next": items[-1]["command_cursor"] if len(items) == limit else None,
+    }
+
+
+@app.post("/site/v1/commands/{command_id}/ack")
+def acknowledge_site_command(
+    command_id: uuid.UUID,
+    body: CommandAck,
+    site_id: Annotated[str, Depends(authenticate_site)],
+    db: Annotated[Database, Depends(get_database)],
+) -> dict[str, Any]:
+    try:
+        return db.acknowledge_command(site_id, command_id, body.result, body.error)
+    except (ConflictError, NotFoundError, ForbiddenError) as exc:
+        map_store_error(exc)
 
 
 @app.post("/site/v1/apps/{app_id}/federations/{federation_id}/artifacts", status_code=201)

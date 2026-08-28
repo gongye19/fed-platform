@@ -44,8 +44,7 @@ FedAgent Platform
                          │ 只主动出站 HTTPS
 ┌────────────────────────▼───────────────────────────┐
 │ 中心平台                                               │
-│ FastAPI Control API                                      │
-│ Federation Console / Admin API                            │
+│ React Federation Console → FastAPI Control/Admin API      │
 │ App Registry / Agent Registry / Federation Registry      │
 │ Event & Command Channel / Release & Delivery              │
 │ Plugin Runner / App Federation Agent Worker               │
@@ -59,6 +58,7 @@ FedAgent Platform
 ```text
 fed-api       FastAPI API 进程
 fed-worker    同一 Python 代码库的后台 Worker
+fed-console   独立 React/Vite 管理控制台
 postgres      元数据、事件、任务、Agent 状态、发布
 object-store  工件 bytes；有大工件时再接 S3/MinIO
 ```
@@ -474,10 +474,10 @@ audit_log
 | 部分 | v1 |
 |---|---|
 | Control API | Python 3.12+ / FastAPI / Pydantic v2 |
-| 管理前端 | FastAPI 服务端渲染 / Jinja2 / 原生 CSS 与少量 JavaScript |
+| 管理前端 | React 19 / Vite；独立 `frontend/` 服务 |
 | Worker & Agent | Python 3.12+ |
 | 元数据 | PostgreSQL；本地开发连接隔离的 Railway development 数据库 |
-| 工件 | 本地文件开发；大工件出现时 S3/MinIO |
+| 工件 | S3-compatible Object Storage；小 JSON 与大工件同一通道 |
 | Federation Node | Python daemon + SQLite + 私有 HTTP API |
 | 协议源 | OpenAPI + JSON Schema 2020-12 |
 | 可观测性 | OpenTelemetry，默认不记录 prompt/output 正文 |
@@ -526,6 +526,7 @@ audit_log
 ## 14. 当前实现
 
 旧 FastAPI/SQLite spike 已被正式 PostgreSQL/S3 基础替换。当前实现覆盖 Application、Agent、Site、
-Federation、Membership、ArtifactType、Artifact、Submission、Event、AgentJob 与 Audit 的第一个纵向切片。
+Federation、Membership、ArtifactType、Artifact、Submission、Event、AgentJob、Release、Delivery、
+Command/Ack、manual-channel Worker 与独立 Federation Console。
 
-下一阶段实现 Release/Delivery 状态机和 Worker；不恢复旧 `Update/Digest/Plugin` 接口。
+下一阶段选择第一个真实应用，冻结 Federation Node 契约；不恢复旧 `Update/Digest/Plugin` 接口。

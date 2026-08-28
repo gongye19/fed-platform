@@ -109,3 +109,37 @@ class ArtifactDescriptor(BaseModel):
     media_type: str = Field(min_length=3, max_length=255)
     size_bytes: int = Field(ge=0)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReleaseCreate(BaseModel):
+    artifact_digests: list[Digest] = Field(min_length=1, max_length=100)
+    target_site_ids: list[StableId] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
+    def unique_references(self) -> ReleaseCreate:
+        if len(self.artifact_digests) != len(set(self.artifact_digests)):
+            raise ValueError("artifact_digests must be unique")
+        if len(self.target_site_ids) != len(set(self.target_site_ids)):
+            raise ValueError("target_site_ids must be unique")
+        return self
+
+
+class DeliveryAction(BaseModel):
+    site_ids: list[StableId] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
+    def unique_sites(self) -> DeliveryAction:
+        if len(self.site_ids) != len(set(self.site_ids)):
+            raise ValueError("site_ids must be unique")
+        return self
+
+
+class CommandAck(BaseModel):
+    result: Literal["succeeded", "failed"]
+    error: str | None = Field(default=None, max_length=1000)
+
+    @model_validator(mode="after")
+    def require_error_for_failure(self) -> CommandAck:
+        if self.result == "failed" and not self.error:
+            raise ValueError("error is required when result is failed")
+        return self

@@ -13,17 +13,20 @@
 
 ```text
 Mac
-└─ fed-api / fed-worker 源码与本地进程
+└─ frontend / backend 源码与本地进程
         │ TLS
         ▼
 Railway development environment
-├─ PostgreSQL 16
+├─ fed-console
+├─ fed-api / fed-worker
+├─ PostgreSQL 18
 └─ Private S3-compatible Bucket
 
 Railway production environment（需要线上联调后再建）
 ├─ fed-api
 ├─ fed-worker
-├─ PostgreSQL 16
+├─ fed-console
+├─ PostgreSQL 18
 └─ Private S3-compatible Bucket
 ```
 
@@ -81,6 +84,8 @@ Presigned GET/PUT
 
 ```text
 FEDPLAT_DATABASE_URL=postgresql://...
+FEDPLAT_ADMIN_TOKEN=至少24字符
+FEDPLAT_CORS_ORIGINS=https://fed-console.example
 
 FEDPLAT_S3_ENDPOINT=https://...
 FEDPLAT_S3_BUCKET=...
@@ -88,6 +93,8 @@ FEDPLAT_S3_REGION=...
 FEDPLAT_S3_ACCESS_KEY_ID=...
 FEDPLAT_S3_SECRET_ACCESS_KEY=...
 FEDPLAT_S3_URL_STYLE=virtual        # 或 path
+
+VITE_API_URL=https://fed-api.example
 ```
 
 Railway/Northflank 提供的变量通过平台变量引用映射到这些名字。代码不判断自己运行在 Railway、
@@ -110,7 +117,7 @@ path style。其余差异由 S3 client 处理。
 2. 创建一个 PostgreSQL 和一个 Bucket
 3. 只给 development PostgreSQL 开 Public Access
 4. 下载/映射 development 凭据到 .env.local
-5. Mac 运行 FastAPI，直接连接远端 development 数据库和 Bucket
+5. Mac 运行 FastAPI 与 Vite，直接连接远端 development 数据库和 Bucket
 6. git push 后把同一镜像部署到 Railway，再将 FEDPLAT_DATABASE_URL 映射到私网连接
 ```
 
@@ -128,16 +135,32 @@ path style。其余差异由 S3 client 处理。
 
 ## 5. Railway 上的实际服务
 
-首版只有四个资源：
+首版只有五个资源：
 
 | 资源 | 作用 | 是否持久化 |
 |---|---|---|
-| `fed-api` | FastAPI、Console、Site/Admin API | 否 |
+| `fed-console` | React 管理控制台 | 否 |
+| `fed-api` | FastAPI Site/Admin API | 否 |
 | `fed-worker` | AgentJob、算法和 Delivery 后台处理 | 否 |
 | `postgres` | 所有元数据、状态与审计 | Railway 数据库 volume |
 | `artifacts` | Artifact bytes | Railway S3-compatible Bucket |
 
-API 与 Worker 使用同一个 Docker image，只设置不同启动命令。不增加 Redis、消息队列或单独前端容器。
+API 与 Worker 使用 `backend/` 的同一个 Docker image，只设置不同启动命令；Console 使用 `frontend/`
+的独立镜像。不增加 Redis 或消息队列。
+
+### Monorepo 独立发布
+
+```text
+fed-api      Root Directory /backend   Watch /backend/**
+fed-worker   Root Directory /backend   Watch /backend/**
+fed-console  Root Directory /frontend  Watch /frontend/**
+```
+
+Railway 的 Root Directory 让各服务只拿到对应目录作为构建上下文；Watch Paths 保证只改前端不会重建
+API/Worker，只改后端也不会重建 Console。Dockerfile、健康检查、migration 和启动命令均按服务配置。
+Railway 旧 Config as Code 已进入弃用期，因此仓库不再使用 `railway.json`；整个项目由
+`.railway/railway.ts` 描述，并通过 `railway config plan/apply` 管理：
+[Infrastructure as Code](https://docs.railway.com/infrastructure-as-code)、[Monorepo](https://docs.railway.com/deployments/monorepo)。
 
 API/Worker 容器文件系统不保存有效数据，只允许使用有大小上限的 `/tmp`。Artifact 采用流式上传；大文件成熟后
 再启用 multipart/presigned upload，接口仍然是同一个 S3 client。
@@ -156,9 +179,8 @@ PostgreSQL 服务的数据盘，不适合我们的 Artifact 通道：
 
 ```text
 migrations/
-├─ 0001_registry.sql
-├─ 0002_artifact_channel.sql
-└─ 0003_release_delivery.sql
+├─ 0001_registry_channel.sql
+└─ 0002_release_delivery.sql
 ```
 
 数据库维护 `schema_migrations(version, applied_at, checksum)`。同一 migration 内容发布后不可修改，
@@ -206,7 +228,8 @@ PostgreSQL dump；只备份数据库、不备份 Artifact bytes，恢复后会�
 目标环境仍然只部署：
 
 ```text
-fed-api / fed-worker（同一镜像）
+fed-console（独立镜像）
+fed-api / fed-worker（同一后端镜像）
 PostgreSQL 16+
 任一 S3-compatible Object Storage
 ```

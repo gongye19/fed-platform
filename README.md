@@ -12,7 +12,7 @@
 
 ## 代码状态
 
-正式 v1 的第一个纵向切片已经实现：
+正式 v1 的管理与发布通道已经实现：
 
 - FedApp Manifest、Application、AppFederationAgent 注册；
 - Site、Federation、Membership 和 Bearer credential；
@@ -20,16 +20,28 @@
 - Railway/S3-compatible Artifact 存储；
 - Artifact digest、大小、media type 和 metadata schema 校验；
 - Submission、Event、AgentJob 同事务写入及幂等；
-- Application 列表、拓扑和 Submission 查询 API。
+- 不可变 Release、站点 Delivery、stage/activate/rollback Command 与 Ack；
+- PostgreSQL `SKIP LOCKED` Agent Worker；
+- Application、拓扑、工件、发布、站点和活动管理 API；
+- 可独立部署的 React 管理控制台。
 
-旧 SQLite `Update / Digest / Plugin` spike 已删除，不提供兼容接口。Release/Delivery、Worker、插件运行和管理前端尚未实现。
+旧 SQLite `Update / Digest / Plugin` spike 已删除，不提供兼容接口。具体 Agent Core、联邦算法与 Artifact Handler 插件仍只保留协议位置，等第一个真实应用确定语义后再实现。
+
+## 仓库结构
+
+```text
+backend/    FastAPI、Worker、migration、协议与测试
+frontend/   React/Vite 管理控制台
+```
+
+Railway 的 `fed-api`、`fed-worker` 都监听 `/backend/**`，`fed-console` 只监听 `/frontend/**`；两个目录可以独立构建和更新。
 
 ## 本地运行
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e "./backend[dev]"
 
 set -a
 source .env.local
@@ -37,10 +49,14 @@ set +a
 
 fed-migrate
 uvicorn fedplat.app:app --reload
-pytest
+pytest backend/tests
+
+cd frontend
+npm install
+npm run dev
 ```
 
-配置模板见 [.env.example](./.env.example)。正式中心数据库只支持 PostgreSQL，Artifact 内容只使用 S3-compatible storage。
+配置模板见 [backend/.env.example](./backend/.env.example) 和 [frontend/.env.example](./frontend/.env.example)。正式中心数据库只支持 PostgreSQL，Artifact 内容只使用 S3-compatible storage。
 
 ## 当前 API
 
@@ -52,9 +68,17 @@ POST /admin/v1/apps
 GET  /admin/v1/apps
 GET  /admin/v1/apps/{app_id}/topology
 POST /admin/v1/sites
+GET  /admin/v1/sites
+GET  /admin/v1/activity
 POST /admin/v1/apps/{app_id}/federations
 PUT  /admin/v1/apps/{app_id}/federations/{federation_id}/memberships/{site_id}
 GET  /admin/v1/apps/{app_id}/federations/{federation_id}/submissions
+POST /admin/v1/apps/{app_id}/federations/{federation_id}/releases
+GET  /admin/v1/apps/{app_id}/federations/{federation_id}/releases
+GET  /admin/v1/apps/{app_id}/federations/{federation_id}/releases/{release_id}
+POST /admin/v1/apps/{app_id}/federations/{federation_id}/releases/{release_id}/{stage|activate|rollback}
 
 POST /site/v1/apps/{app_id}/federations/{federation_id}/artifacts
+GET  /site/v1/commands
+POST /site/v1/commands/{command_id}/ack
 ```

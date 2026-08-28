@@ -84,3 +84,13 @@ class S3ArtifactStore:
             self.client.delete_object(Bucket=self.bucket, Key=key)
         except (BotoCoreError, ClientError) as exc:
             raise ArtifactStoreError("failed to delete artifact object") from exc
+
+    def download_url(self, key: str, expires_in: int = 900) -> str:
+        try:
+            return self.client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": self.bucket, "Key": key},
+                ExpiresIn=expires_in,
+            )
+        except (BotoCoreError, ClientError) as exc:
+            raise ArtifactStoreError("failed to authorize artifact download") from exc

@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from fedplat.protocol import FedAppManifest, json_digest
+from fedplat.protocol import CommandAck, FedAppManifest, ReleaseCreate, json_digest
 
 
 def test_manifest_derives_and_checks_schema_digest():
@@ -28,3 +28,13 @@ def test_manifest_derives_and_checks_schema_digest():
     raw["artifact_types"][0]["schema_digest"] = "sha256:" + "0" * 64
     with pytest.raises(ValidationError):
         FedAppManifest.model_validate(raw)
+
+
+def test_release_and_ack_boundaries():
+    digest = "sha256:" + "a" * 64
+    release = ReleaseCreate(artifact_digests=[digest], target_site_ids=["site-a"])
+    assert release.artifact_digests == [digest]
+    with pytest.raises(ValidationError):
+        ReleaseCreate(artifact_digests=[digest, digest])
+    with pytest.raises(ValidationError):
+        CommandAck(result="failed")

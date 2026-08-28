@@ -1,6 +1,6 @@
 [project]
 name = "fedplat"
-version = "0.2.0"
+version = "0.3.0"
 description = "FedAgent platform kernel: protocol, registry, plugin socket"
 requires-python = ">=3.12"
 dependencies = [
@@ -22,6 +22,7 @@ build-backend = "setuptools.build_meta"
 
 [project.scripts]
 fed-migrate = "fedplat.migrate:main"
+fed-worker = "fedplat.worker:main"
 
 [tool.setuptools.packages.find]
 include = ["fedplat*"]

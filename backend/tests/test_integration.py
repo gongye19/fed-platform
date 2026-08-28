@@ -178,6 +178,76 @@ def test_registry_and_artifact_submission(live_stack):
         f"/admin/v1/apps/{app_id}/federations/main/submissions", headers=admin
     )
     assert len(submissions.json()["items"]) == 1
+
+    release = client.post(
+        f"/admin/v1/apps/{app_id}/federations/main/releases",
+        json={"artifact_digests": [digest]},
+        headers=admin,
+    )
+    assert release.status_code == 201
+    release_id = release.json()["release_id"]
+    stage = client.post(
+        f"/admin/v1/apps/{app_id}/federations/main/releases/{release_id}/stage",
+        json={},
+        headers=admin,
+    )
+    assert stage.status_code == 200 and len(stage.json()["items"]) == 1
+
+    commands = client.get("/site/v1/commands", headers=site_auth)
+    stage_command = commands.json()["items"][0]
+    assert stage_command["command_type"] == "release.stage"
+    assert stage_command["payload"]["artifacts"][0]["digest"] == digest
+    assert stage_command["payload"]["artifacts"][0]["download_url"].startswith("http")
+    acknowledged = client.post(
+        f"/site/v1/commands/{stage_command['command_id']}/ack",
+        json={"result": "succeeded"},
+        headers=site_auth,
+    )
+    assert acknowledged.json()["delivery_state"] == "staged"
+
+    activate = client.post(
+        f"/admin/v1/apps/{app_id}/federations/main/releases/{release_id}/activate",
+        json={},
+        headers=admin,
+    ).json()["items"][0]
+    failed = client.post(
+        f"/site/v1/commands/{activate['command_id']}/ack",
+        json={"result": "failed", "error": "local validation failed"},
+        headers=site_auth,
+    )
+    assert failed.json()["delivery_state"] == "failed"
+    retry = client.post(
+        f"/admin/v1/apps/{app_id}/federations/main/releases/{release_id}/activate",
+        json={},
+        headers=admin,
+    ).json()["items"][0]
+    assert retry["attempt"] == 2
+    assert client.post(
+        f"/site/v1/commands/{retry['command_id']}/ack",
+        json={"result": "succeeded"},
+        headers=site_auth,
+    ).json()["delivery_state"] == "active"
+
+    rollback = client.post(
+        f"/admin/v1/apps/{app_id}/federations/main/releases/{release_id}/rollback",
+        json={},
+        headers=admin,
+    ).json()["items"][0]
+    assert client.post(
+        f"/site/v1/commands/{rollback['command_id']}/ack",
+        json={"result": "succeeded"},
+        headers=site_auth,
+    ).json()["delivery_state"] == "rolled_back"
+    detail = client.get(
+        f"/admin/v1/apps/{app_id}/federations/main/releases/{release_id}", headers=admin
+    )
+    assert detail.json()["deliveries"][0]["state"] == "rolled_back"
+    assert client.get("/admin/v1/sites", headers=admin).json()["items"][0]["site_id"] == site_id
+    assert client.get("/admin/v1/activity", headers=admin).json()["items"]
+
+    job = database.claim_agent_job("integration-worker")
+    assert job and job["app_id"] == app_id
+    database.finish_agent_job(job["job_id"], app_id)
     with database.connection() as conn:
-        assert conn.execute("SELECT count(*) AS n FROM events").fetchone()["n"] == 1
-        assert conn.execute("SELECT count(*) AS n FROM agent_jobs").fetchone()["n"] == 1
+        assert conn.execute("SELECT count(*) AS n FROM events").fetchone()["n"] == 5
+        assert conn.execute("SELECT status FROM agent_jobs").fetchone()["status"] == "succeeded"
