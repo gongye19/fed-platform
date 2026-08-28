@@ -20,7 +20,7 @@ export default defineRailway(() => {
     preDeploy: "fed-migrate",
     healthcheck: "/health",
     healthcheckTimeout: 30,
-    deploy: { restartPolicyType: "ON_FAILURE", restartPolicyMaxRetries: 3 },
+    deploy: { restartPolicyMaxRetries: 3 },
     replicas: { "asia-southeast1-eqsg3a": 1 },
     env: {
       FEDPLAT_ADMIN_TOKEN: preserve(),
@@ -41,7 +41,7 @@ export default defineRailway(() => {
     build: { builder: "DOCKERFILE", dockerfilePath: "Dockerfile", watchPatterns: ["/backend/**"] },
     start: "fed-worker",
     preDeploy: "fed-migrate",
-    deploy: { restartPolicyType: "ON_FAILURE", restartPolicyMaxRetries: 3 },
+    deploy: { restartPolicyMaxRetries: 3 },
     replicas: { "asia-southeast1-eqsg3a": 1 },
     env: { FEDPLAT_DATABASE_URL: postgresDb.env.DATABASE_URL },
   });
@@ -54,7 +54,7 @@ export default defineRailway(() => {
     build: { builder: "DOCKERFILE", dockerfilePath: "Dockerfile", watchPatterns: ["/frontend/**"] },
     healthcheck: "/health",
     healthcheckTimeout: 30,
-    deploy: { restartPolicyType: "ON_FAILURE", restartPolicyMaxRetries: 3 },
+    deploy: { restartPolicyMaxRetries: 3 },
     replicas: { "asia-southeast1-eqsg3a": 1 },
     env: { VITE_API_URL: "https://fed-api-development.up.railway.app" },
   });
