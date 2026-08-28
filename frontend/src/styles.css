@@ -325,7 +325,7 @@ td small { margin-top: 4px; }
 .architecture-workbench__bar small { color: var(--muted); font-size: 10px; }
 .fixed-diagram-scroll { overflow-x: auto; }
 .react-flow-canvas { min-width: 900px; height: 640px; background: #0d0e11; }
-.react-flow-canvas--hierarchy { height: 810px; }
+.react-flow-canvas--hierarchy { height: 720px; }
 .react-flow-canvas--flow { height: 560px; }
 .react-flow-canvas .react-flow { --xy-background-color: #0d0e11; }
 .react-flow-canvas .react-flow__node { border-radius: var(--radius-sm); outline: none; }

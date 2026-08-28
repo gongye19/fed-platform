@@ -66,12 +66,17 @@ type DiagramNode = PlatformNode | LayerNode;
 function PlatformDiagramNode({ data, selected }: NodeProps<PlatformNode>) {
   return (
     <div className={`flow-node${selected ? " selected" : ""}`}>
-      <Handle id="top" type="target" position={Position.Top} />
-      <Handle id="top-out" type="source" position={Position.Top} style={{ left: "62%" }} />
+      <Handle id="top" type="target" position={Position.Top} style={{ left: "44%" }} />
+      <Handle id="top-out" type="source" position={Position.Top} style={{ left: "56%" }} />
       <Handle id="left" type="target" position={Position.Left} />
       <span className="flow-node__copy"><strong>{data.title}</strong><small>{data.subtitle}</small></span>
       <Handle id="bottom" type="source" position={Position.Bottom} />
-      <Handle id="bottom-in" type="target" position={Position.Bottom} style={{ left: "62%" }} />
+      <Handle id="bottom-left" type="source" position={Position.Bottom} style={{ left: "18%" }} />
+      <Handle id="bottom-center" type="source" position={Position.Bottom} style={{ left: "50%" }} />
+      <Handle id="bottom-right" type="source" position={Position.Bottom} style={{ left: "82%" }} />
+      <Handle id="bottom-left-in" type="target" position={Position.Bottom} style={{ left: "24%" }} />
+      <Handle id="bottom-center-in" type="target" position={Position.Bottom} style={{ left: "56%" }} />
+      <Handle id="bottom-right-in" type="target" position={Position.Bottom} style={{ left: "88%" }} />
       <Handle id="right" type="source" position={Position.Right} />
     </div>
   );
@@ -89,30 +94,28 @@ function DiagramLayerNode({ data }: NodeProps<LayerNode>) {
 const nodeTypes: NodeTypes = { platform: PlatformDiagramNode, layer: DiagramLayerNode };
 const activeMarker = { type: MarkerType.ArrowClosed, width: 14, height: 14, color: "#7c86ea" } as const;
 
-function verticalEdge(id: string, source: string, target: string, label?: string): Edge {
+function verticalEdge(id: string, source: string, target: string, sourceHandle = "bottom"): Edge {
   return {
     id,
     source,
     target,
-    sourceHandle: "bottom",
+    sourceHandle,
     targetHandle: "top",
     type: "smoothstep",
-    label,
     animated: true,
     markerEnd: activeMarker,
     style: { stroke: "#7c86ea", strokeWidth: 1.35 },
   };
 }
 
-function reverseVerticalEdge(id: string, source: string, target: string, label?: string): Edge {
+function reverseVerticalEdge(id: string, source: string, target: string, targetHandle: string): Edge {
   return {
     id,
     source,
     target,
     sourceHandle: "top-out",
-    targetHandle: "bottom-in",
+    targetHandle,
     type: "smoothstep",
-    label,
     animated: true,
     markerEnd: activeMarker,
     style: { stroke: "#7c86ea", strokeWidth: 1.35 },
@@ -187,12 +190,13 @@ const hierarchyNodes: DiagramNode[] = [
   ),
 ];
 
-const hierarchyEdges: Edge[] = (["A", "B", "N"] as const).flatMap((suffix) => [
-  verticalEdge(`platform-app-${suffix}`, "platform", `app-${suffix}`, suffix === "B" ? "注册应用" : undefined),
-  verticalEdge(`app-federation-${suffix}`, `app-${suffix}`, `federation-${suffix}`, suffix === "B" ? "配置联邦域" : undefined),
-  ...[1, 2, 3].flatMap((site) => [
-    verticalEdge(`federation-site-${suffix}-${site}`, `federation-${suffix}`, `site-${suffix}-${site}`, site === 2 ? "结果下发" : undefined),
-    reverseVerticalEdge(`site-federation-${suffix}-${site}`, `site-${suffix}-${site}`, `federation-${suffix}`, site === 2 ? "内容上传" : undefined),
+const branchPorts = ["left", "center", "right"] as const;
+const hierarchyEdges: Edge[] = (["A", "B", "N"] as const).flatMap((suffix, appIndex) => [
+  verticalEdge(`platform-app-${suffix}`, "platform", `app-${suffix}`, `bottom-${branchPorts[appIndex]}`),
+  verticalEdge(`app-federation-${suffix}`, `app-${suffix}`, `federation-${suffix}`),
+  ...[1, 2, 3].flatMap((site, siteIndex) => [
+    verticalEdge(`federation-site-${suffix}-${site}`, `federation-${suffix}`, `site-${suffix}-${site}`, `bottom-${branchPorts[siteIndex]}`),
+    reverseVerticalEdge(`site-federation-${suffix}-${site}`, `site-${suffix}-${site}`, `federation-${suffix}`, `bottom-${branchPorts[siteIndex]}-in`),
   ]),
 ]);
 
@@ -256,7 +260,7 @@ function FixedDiagram({ kind, nodes, edges, onSelect }: {
           nodeTypes={nodeTypes}
           onNodeClick={onNodeClick}
           fitView
-          fitViewOptions={{ padding: 0.04 }}
+          fitViewOptions={{ padding: kind === "hierarchy" ? 0.015 : 0.04 }}
           minZoom={0.2}
           maxZoom={1}
           panOnDrag={false}
