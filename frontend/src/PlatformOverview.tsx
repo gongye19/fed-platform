@@ -70,6 +70,9 @@ function PlatformDiagramNode({ data, selected }: NodeProps<PlatformNode>) {
       <Handle id="top-down" type="target" position={Position.Top} style={{ left: "44%" }} />
       <Handle id="top-up" type="source" position={Position.Top} style={{ left: "56%" }} />
       <Handle id="left" type="target" position={Position.Left} />
+      <Handle id="left-top" type="target" position={Position.Left} style={{ top: "20%" }} />
+      <Handle id="left-middle" type="target" position={Position.Left} style={{ top: "50%" }} />
+      <Handle id="left-bottom" type="target" position={Position.Left} style={{ top: "80%" }} />
       <span className="flow-node__copy"><strong>{data.title}</strong><small>{data.subtitle}</small></span>
       <Handle id="bottom" type="source" position={Position.Bottom} />
       <Handle id="bottom-app-left" type="source" position={Position.Bottom} style={{ left: "15.91%" }} />
@@ -82,6 +85,9 @@ function PlatformDiagramNode({ data, selected }: NodeProps<PlatformNode>) {
       <Handle id="bottom-site-center-in" type="target" position={Position.Bottom} style={{ left: "52.52%" }} />
       <Handle id="bottom-site-right-in" type="target" position={Position.Bottom} style={{ left: "85.86%" }} />
       <Handle id="right" type="source" position={Position.Right} />
+      <Handle id="right-top" type="source" position={Position.Right} style={{ top: "20%" }} />
+      <Handle id="right-middle" type="source" position={Position.Right} style={{ top: "50%" }} />
+      <Handle id="right-bottom" type="source" position={Position.Right} style={{ top: "80%" }} />
     </div>
   );
 }
@@ -125,26 +131,38 @@ function reverseVerticalEdge(id: string, source: string, target: string, targetH
   };
 }
 
-function horizontalEdge(id: string, source: string, target: string, label?: string, dashed = false): Edge {
+function horizontalEdge(id: string, source: string, target: string, sourceHandle = "right", targetHandle = "left"): Edge {
   return {
     id,
     source,
     target,
-    sourceHandle: "right",
-    targetHandle: "left",
-    type: "smoothstep",
-    label,
-    animated: !dashed,
+    sourceHandle,
+    targetHandle,
+    type: "straight",
+    animated: true,
     markerEnd: activeMarker,
-    style: { stroke: "#7c86ea", strokeWidth: 1.35, strokeDasharray: dashed ? "5 5" : undefined },
+    style: { stroke: "#7c86ea", strokeWidth: 1.35 },
+  };
+}
+
+function pluginEdge(): Edge {
+  return {
+    id: "agent-strategy",
+    source: "flow-agent",
+    target: "strategy",
+    sourceHandle: "bottom",
+    targetHandle: "top",
+    type: "straight",
+    markerEnd: activeMarker,
+    style: { stroke: "#7c86ea", strokeWidth: 1.35, strokeDasharray: "5 5" },
   };
 }
 
 const hierarchyNodes: DiagramNode[] = [
-  { id: "layer-platform", type: "layer", position: { x: 0, y: 0 }, data: { title: "00  联邦平台", subtitle: "统一协议与应用注册入口", tone: "platform" }, style: { width: 1200, height: 132 }, selectable: false, focusable: false, draggable: false },
-  { id: "layer-app", type: "layer", position: { x: 0, y: 152 }, data: { title: "01  应用层", subtitle: "所有应用都按照平台协议开发", tone: "plain" }, style: { width: 1200, height: 142 }, selectable: false, focusable: false, draggable: false },
-  { id: "layer-federation", type: "layer", position: { x: 0, y: 314 }, data: { title: "02  联邦域层", subtitle: "联邦 Agent 运行在所属联邦域内部", tone: "platform" }, style: { width: 1200, height: 230 }, selectable: false, focusable: false, draggable: false },
-  { id: "layer-sites", type: "layer", position: { x: 0, y: 564 }, data: { title: "03  站点层", subtitle: "站点提交内容，并接收联邦处理结果", tone: "sites" }, style: { width: 1200, height: 160 }, selectable: false, focusable: false, draggable: false },
+  { id: "layer-platform", type: "layer", position: { x: 0, y: 0 }, data: { title: "联邦平台", subtitle: "统一协议与应用注册入口", tone: "platform" }, style: { width: 1200, height: 132 }, selectable: false, focusable: false, draggable: false },
+  { id: "layer-app", type: "layer", position: { x: 0, y: 152 }, data: { title: "应用层", subtitle: "所有应用都按照平台协议开发", tone: "plain" }, style: { width: 1200, height: 142 }, selectable: false, focusable: false, draggable: false },
+  { id: "layer-federation", type: "layer", position: { x: 0, y: 314 }, data: { title: "联邦域层", subtitle: "联邦 Agent 运行在所属联邦域内部", tone: "platform" }, style: { width: 1200, height: 230 }, selectable: false, focusable: false, draggable: false },
+  { id: "layer-sites", type: "layer", position: { x: 0, y: 564 }, data: { title: "站点层", subtitle: "站点提交内容，并接收联邦处理结果", tone: "sites" }, style: { width: 1200, height: 160 }, selectable: false, focusable: false, draggable: false },
 
   { id: "platform", type: "platform", className: "platform-root", parentId: "layer-platform", extent: "parent", position: { x: 72, y: 46 }, data: { title: "联邦平台", subtitle: "统一协议 · 注册并管理多个应用", moduleId: "platform" }, style: { width: 1056, height: 72 }, ariaLabel: "联邦平台" },
 
@@ -204,9 +222,9 @@ const hierarchyEdges: Edge[] = (["A", "B", "N"] as const).flatMap((suffix, appIn
 ]);
 
 const flowNodes: DiagramNode[] = [
-  { id: "flow-source", type: "layer", position: { x: 0, y: 0 }, data: { title: "站点提交", subtitle: "同一应用的多个站点上传内容", tone: "sites" }, style: { width: 230, height: 500 }, selectable: false, focusable: false, draggable: false },
-  { id: "flow-platform", type: "layer", position: { x: 250, y: 0 }, data: { title: "联邦平台", subtitle: "不同应用分别处理", tone: "platform" }, style: { width: 700, height: 500 }, selectable: false, focusable: false, draggable: false },
-  { id: "flow-target", type: "layer", position: { x: 970, y: 0 }, data: { title: "站点接收", subtitle: "目标站点接收结果并确认", tone: "sites" }, style: { width: 230, height: 500 }, selectable: false, focusable: false, draggable: false },
+  { id: "flow-source", type: "layer", position: { x: 0, y: 0 }, data: { title: "站点提交", subtitle: "同一应用的多个站点上传内容", tone: "sites" }, style: { width: 230, height: 420 }, selectable: false, focusable: false, draggable: false },
+  { id: "flow-platform", type: "layer", position: { x: 250, y: 0 }, data: { title: "联邦平台", subtitle: "不同应用分别处理", tone: "platform" }, style: { width: 700, height: 420 }, selectable: false, focusable: false, draggable: false },
+  { id: "flow-target", type: "layer", position: { x: 970, y: 0 }, data: { title: "站点接收", subtitle: "目标站点接收结果并确认", tone: "sites" }, style: { width: 230, height: 420 }, selectable: false, focusable: false, draggable: false },
 
   ...[1, 2, 3].map((site, index): PlatformNode => ({
     id: `submit-site-${site}`,
@@ -235,13 +253,14 @@ const flowNodes: DiagramNode[] = [
   })),
 ];
 
+const flowPorts = ["top", "middle", "bottom"] as const;
 const flowEdges: Edge[] = [
-  ...[1, 2, 3].map((site) => horizontalEdge(`submit-gateway-${site}`, `submit-site-${site}`, "gateway", site === 2 ? "提交" : undefined)),
-  horizontalEdge("gateway-storage", "gateway", "storage", "保存"),
-  horizontalEdge("storage-agent", "storage", "flow-agent", "汇总"),
-  horizontalEdge("agent-delivery", "flow-agent", "delivery", "生成结果"),
-  horizontalEdge("agent-strategy", "flow-agent", "strategy", "选择处理方式", true),
-  ...[1, 2, 3].map((site) => horizontalEdge(`delivery-site-${site}`, "delivery", `receive-site-${site}`, site === 2 ? "分发" : undefined)),
+  ...[1, 2, 3].map((site, index) => horizontalEdge(`submit-gateway-${site}`, `submit-site-${site}`, "gateway", "right", `left-${flowPorts[index]}`)),
+  horizontalEdge("gateway-storage", "gateway", "storage"),
+  horizontalEdge("storage-agent", "storage", "flow-agent"),
+  horizontalEdge("agent-delivery", "flow-agent", "delivery"),
+  pluginEdge(),
+  ...[1, 2, 3].map((site, index) => horizontalEdge(`delivery-site-${site}`, "delivery", `receive-site-${site}`, `right-${flowPorts[index]}`, "left")),
 ];
 
 function FixedDiagram({ kind, nodes, edges, onSelect }: {
@@ -263,7 +282,7 @@ function FixedDiagram({ kind, nodes, edges, onSelect }: {
           nodeTypes={nodeTypes}
           onNodeClick={onNodeClick}
           fitView
-          fitViewOptions={{ padding: kind === "hierarchy" ? 0.015 : 0.04 }}
+          fitViewOptions={{ padding: 0.02 }}
           minZoom={0.2}
           maxZoom={1}
           panOnDrag={false}

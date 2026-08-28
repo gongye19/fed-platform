@@ -325,8 +325,8 @@ td small { margin-top: 4px; }
 .architecture-workbench__bar small { color: var(--muted); font-size: 10px; }
 .fixed-diagram-scroll { overflow-x: auto; }
 .react-flow-canvas { min-width: 900px; height: 640px; background: #0d0e11; }
-.react-flow-canvas--hierarchy { height: auto; aspect-ratio: 1200 / 724; }
-.react-flow-canvas--flow { height: 560px; }
+.react-flow-canvas--hierarchy { height: auto; aspect-ratio: 1200 / 772; }
+.react-flow-canvas--flow { height: auto; aspect-ratio: 1200 / 470; }
 .react-flow-canvas .react-flow { --xy-background-color: #0d0e11; }
 .react-flow-canvas .react-flow__node { border-radius: var(--radius-sm); outline: none; }
 .react-flow-canvas .react-flow__node:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: 3px; }
@@ -351,8 +351,6 @@ td small { margin-top: 4px; }
 .react-flow-canvas--hierarchy .flow-layer span { display: none; }
 .react-flow-canvas--hierarchy .react-flow__node.federation-container > .flow-node { align-items: flex-start; padding: 16px 18px; }
 .flow-node .react-flow__handle { width: 1px; height: 1px; min-width: 1px; min-height: 1px; opacity: 0; }
-.react-flow-canvas .react-flow__edge-text { fill: #a2a7b0; font: 500 9px "Geist Mono Variable", monospace; }
-.react-flow-canvas .react-flow__edge-textbg { fill: #101116; fill-opacity: .96; stroke: var(--line); stroke-width: 1px; }
 
 .architecture-inspector { min-height: 128px; background: var(--surface-1); border-top: 1px solid var(--line-strong); }
 .architecture-inspector__summary { max-width: 760px; padding: 24px; animation: inspector-in 180ms cubic-bezier(.22, 1, .36, 1); }
