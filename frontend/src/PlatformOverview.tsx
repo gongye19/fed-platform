@@ -43,8 +43,8 @@ const moduleDetails = {
     summary: "通过检查的内容和处理进度会被保存，后续 Agent 可以继续使用，整个过程也可以追踪。",
   },
   strategy: {
-    title: "联邦处理插件",
-    summary: "Agent 根据应用需要选择处理方式，例如汇总经验、同步 Skill 或合并模型权重。处理方式可以替换和扩展。",
+    title: "联邦算法",
+    summary: "联邦算法为 Agent 提供具体处理方式，例如汇总经验、同步 Skill 或合并模型权重，并且可以替换和扩展。",
   },
   delivery: {
     title: "结果分发",
@@ -67,6 +67,7 @@ function PlatformDiagramNode({ data, selected }: NodeProps<PlatformNode>) {
   return (
     <div className={`flow-node${selected ? " selected" : ""}`}>
       <Handle id="top" type="target" position={Position.Top} />
+      <Handle id="top-source" type="source" position={Position.Top} />
       <Handle id="top-down" type="target" position={Position.Top} style={{ left: "44%" }} />
       <Handle id="top-up" type="source" position={Position.Top} style={{ left: "56%" }} />
       <Handle id="left" type="target" position={Position.Left} />
@@ -75,6 +76,7 @@ function PlatformDiagramNode({ data, selected }: NodeProps<PlatformNode>) {
       <Handle id="left-bottom" type="target" position={Position.Left} style={{ top: "80%" }} />
       <span className="flow-node__copy"><strong>{data.title}</strong><small>{data.subtitle}</small></span>
       <Handle id="bottom" type="source" position={Position.Bottom} />
+      <Handle id="bottom-target" type="target" position={Position.Bottom} />
       <Handle id="bottom-app-left" type="source" position={Position.Bottom} style={{ left: "15.91%" }} />
       <Handle id="bottom-app-center" type="source" position={Position.Bottom} style={{ left: "50%" }} />
       <Handle id="bottom-app-right" type="source" position={Position.Bottom} style={{ left: "84.09%" }} />
@@ -138,23 +140,24 @@ function horizontalEdge(id: string, source: string, target: string, sourceHandle
     target,
     sourceHandle,
     targetHandle,
-    type: "straight",
+    type: "smoothstep",
     animated: true,
     markerEnd: activeMarker,
     style: { stroke: "#7c86ea", strokeWidth: 1.35 },
   };
 }
 
-function pluginEdge(): Edge {
+function algorithmEdge(): Edge {
   return {
-    id: "agent-strategy",
-    source: "flow-agent",
-    target: "strategy",
-    sourceHandle: "bottom",
-    targetHandle: "top",
+    id: "algorithm-agent",
+    source: "strategy",
+    target: "flow-agent",
+    sourceHandle: "top-source",
+    targetHandle: "bottom-target",
     type: "straight",
+    animated: true,
     markerEnd: activeMarker,
-    style: { stroke: "#7c86ea", strokeWidth: 1.35, strokeDasharray: "5 5" },
+    style: { stroke: "#7c86ea", strokeWidth: 1.35 },
   };
 }
 
@@ -240,7 +243,7 @@ const flowNodes: DiagramNode[] = [
   { id: "storage", type: "platform", parentId: "flow-platform", extent: "parent", position: { x: 202, y: 194 }, data: { title: "数据保存", subtitle: "保存内容和处理进度", moduleId: "storage" }, style: { width: 142, height: 66 }, ariaLabel: "数据保存" },
   { id: "flow-agent", type: "platform", parentId: "flow-platform", extent: "parent", position: { x: 370, y: 194 }, data: { title: "应用联邦 Agent", subtitle: "汇总本应用的站点内容", moduleId: "agent" }, style: { width: 142, height: 66 }, ariaLabel: "应用联邦 Agent" },
   { id: "delivery", type: "platform", parentId: "flow-platform", extent: "parent", position: { x: 538, y: 194 }, data: { title: "结果分发", subtitle: "把结果发给目标站点", moduleId: "delivery" }, style: { width: 126, height: 66 }, ariaLabel: "结果分发" },
-  { id: "strategy", type: "platform", parentId: "flow-platform", extent: "parent", position: { x: 370, y: 324 }, data: { title: "联邦处理插件", subtitle: "选择具体处理方式", moduleId: "strategy" }, style: { width: 142, height: 62 }, ariaLabel: "联邦处理插件" },
+  { id: "strategy", type: "platform", parentId: "flow-platform", extent: "parent", position: { x: 370, y: 324 }, data: { title: "联邦算法", subtitle: "提供具体处理方式", moduleId: "strategy" }, style: { width: 142, height: 62 }, ariaLabel: "联邦算法" },
   ...[1, 2, 3].map((site, index): PlatformNode => ({
     id: `receive-site-${site}`,
     type: "platform",
@@ -259,7 +262,7 @@ const flowEdges: Edge[] = [
   horizontalEdge("gateway-storage", "gateway", "storage"),
   horizontalEdge("storage-agent", "storage", "flow-agent"),
   horizontalEdge("agent-delivery", "flow-agent", "delivery"),
-  pluginEdge(),
+  algorithmEdge(),
   ...[1, 2, 3].map((site, index) => horizontalEdge(`delivery-site-${site}`, "delivery", `receive-site-${site}`, `right-${flowPorts[index]}`, "left")),
 ];
 
