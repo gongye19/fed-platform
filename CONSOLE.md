@@ -65,13 +65,16 @@ Application A/B/N
                          Site A/B/N
 ```
 
-概览页回答三个问题：
+概览页是一个可交互的架构工作台，回答三个问题：
 
 - 平台与应用的边界：应用声明 Artifact/Task 契约，平台提供联邦通道；
 - 隔离边界：每个应用拥有自己的 Agent 上下文，数据限定在 `app_id + federation_id`；
 - 一次交换的完整路径：提交、收集、存储、联邦、分发、确认。
 
-概览不请求业务数据，也不混入实时运行指标。应用目录移到 `/apps`，负责查询、注册及进入应用详情。
+主链节点、支撑模块和六步 Exchange Cycle 都可点击；当前节点高亮，下方唯一的 Inspector 展示职责、
+Scope、输入和输出。交互支持键盘与可见焦点，不靠 hover 才能读取内容。
+
+概览不请求业务数据，也不混入实时运行指标。应用目录位于 `/apps`，负责查询、注册及进入应用详情。
 
 ---
 
@@ -214,7 +217,10 @@ GET /admin/v1/activity
 
 - [ConardLi/garden-skills](https://github.com/ConardLi/garden-skills) 的 `web-design-engineer`：用于设计审查流程、Linear 视觉方向和交付检查；只作为开发方法，不是运行时依赖。
 - [Vercel Geist](https://vercel.com/font)：控制台的 Sans/Mono 字体；通过 Fontsource 包随前端构建，自托管、不依赖外部字体 CDN。
-- React + Vite：延续仓库既有前端栈。架构图使用语义化 React 和 CSS 手写，没有引入 UI、图表或流程图库。
+- [Grafana Node Graph](https://grafana.com/docs/grafana/latest/visualizations/panels-visualizations/visualizations/node-graph/)：参考可预测的分层节点布局及点击节点显示上下文信息。
+- [Datadog Service Map](https://docs.datadoghq.com/tracing/services/services_map/)：参考选中依赖节点后聚焦检查的交互方式。
+- [Backstage Catalog Graph](https://backstage.io/docs/features/software-catalog/creating-the-catalog-graph/)：参考以实体与关系表达平台心智模型。
+- React + Vite：延续仓库既有前端栈。交互架构图使用语义化 React 和 CSS 手写，没有引入 UI、图表或流程图库。
 
 ---
 
