@@ -50,29 +50,27 @@ v1 不做独立的“插件市场”和“AI Dashboard”。插件配置等插�
 
 ---
 
-## 3. 默认首页：Platform Overview
+## 3. 默认首页：平台概览
 
 ```text
-Application A/B/N
-       │ register：每应用创建独立 Agent 上下文
-       ▼
-┌──────────────── FEDERATION CONTROL PLANE ────────────────┐
-│ Registry & Contract → AppFederationAgent → Plugin Slots │
-│                                → Artifact & Release      │
-│ PostgreSQL：关系/状态/审计   S3：Artifact 内容           │
-└─────────────────────────┬────────────────────────────────┘
-            inbound ↑ Adapter Protocol ↓ outbound
-                         Site A/B/N
+应用 A             应用 B             应用 N
+  │ 一对一创建        │ 一对一创建        │
+联邦代理 A          联邦代理 B          联邦代理 N
+  │ 管理              │ 管理              │
+联邦域 A            联邦域 B            联邦域 N
+  ├─ 站点 A-1         ├─ 站点 B-1         ├─ 站点 N-1
+  ├─ 站点 A-2         └─ 站点 B-2         └─ 站点 N-2
+  └─ 站点 A-3
 ```
 
 概览页是一个可交互的架构工作台，回答三个问题：
 
-- 平台与应用的边界：应用声明 Artifact/Task 契约，平台提供联邦通道；
-- 隔离边界：每个应用拥有自己的 Agent 上下文，数据限定在 `app_id + federation_id`；
-- 一次交换的完整路径：提交、收集、存储、联邦、分发、确认。
+- 归属关系：一个应用一对一配置独立联邦代理，代理管理本应用的联邦域与站点；
+- 聚合边界：只聚合同一 `app_id + federation_id` 内不同站点的内容；
+- 数据通道：站点提交 → 校验 → 存储 → 应用代理/策略插件 → 发布与投递 → 站点确认。
 
-主链节点、支撑模块和六步 Exchange Cycle 都可点击；当前节点高亮，下方唯一的 Inspector 展示职责、
-Scope、输入和输出。交互支持键盘与可见焦点，不靠 hover 才能读取内容。
+页面提供“组织层级”和“数据流动”两个 React Flow 视图。节点可点击，当前节点高亮，下方统一检查器展示
+职责、作用范围、输入和输出；画布支持平移、缩放、键盘选择与可见焦点。
 
 概览不请求业务数据，也不混入实时运行指标。应用目录位于 `/apps`，负责查询、注册及进入应用详情。
 
@@ -220,7 +218,8 @@ GET /admin/v1/activity
 - [Grafana Node Graph](https://grafana.com/docs/grafana/latest/visualizations/panels-visualizations/visualizations/node-graph/)：参考可预测的分层节点布局及点击节点显示上下文信息。
 - [Datadog Service Map](https://docs.datadoghq.com/tracing/services/services_map/)：参考选中依赖节点后聚焦检查的交互方式。
 - [Backstage Catalog Graph](https://backstage.io/docs/features/software-catalog/creating-the-catalog-graph/)：参考以实体与关系表达平台心智模型。
-- React + Vite：延续仓库既有前端栈。交互架构图使用语义化 React 和 CSS 手写，没有引入 UI、图表或流程图库。
+- [React Flow](https://reactflow.dev/)：运行时节点图库，用于分层容器、父子节点、连线、节点选择、平移与缩放；布局和节点内容由本项目定义。
+- React + Vite：延续仓库既有前端栈；其余界面继续使用语义化 React 与项目 CSS。
 
 ---
 

@@ -315,44 +315,44 @@ td small { margin-top: 4px; }
 .landing__header { display: flex; align-items: end; justify-content: space-between; gap: 32px; margin-bottom: 22px; }
 .landing__header h1 { margin-bottom: 7px; font-size: 32px; }
 .landing__header > div > p:last-child { margin: 0; color: var(--secondary); font-size: 14px; }
-.landing__hint { display: flex; align-items: center; gap: 8px; margin: 0 0 3px; color: var(--muted); font-size: 12px; }
-.landing__hint span { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; }
+.diagram-view-switch { display: inline-flex; padding: 3px; background: var(--surface-1); border: 1px solid var(--line-strong); border-radius: 8px; }
+.diagram-view-switch button { min-height: 32px; padding: 0 12px; color: var(--muted); background: transparent; border: 0; border-radius: 5px; cursor: pointer; font-size: 12px; transition: color 150ms ease-out, background 150ms ease-out; }
+.diagram-view-switch button:hover { color: var(--secondary); }
+.diagram-view-switch button[aria-pressed="true"] { color: var(--ink); background: var(--surface-3); box-shadow: 0 1px 2px rgba(0, 0, 0, .28); }
 
 .architecture-workbench { overflow: hidden; background: #101116; border: 1px solid var(--line-strong); border-radius: var(--radius-md); box-shadow: 0 1px 2px rgba(0, 0, 0, .3); }
 .architecture-workbench__bar { display: flex; align-items: center; justify-content: space-between; min-height: 42px; padding: 0 16px; color: var(--secondary); background: rgba(255, 255, 255, .018); border-bottom: 1px solid var(--line); font-size: 12px; }
-.architecture-workbench__bar code { color: var(--muted); font-size: 10px; }
-.architecture-graph { display: grid; grid-template-columns: repeat(4, minmax(170px, 1fr)); gap: 72px; min-width: 0; padding: 42px 32px 32px; overflow-x: auto; background-image: radial-gradient(rgba(255, 255, 255, .06) .7px, transparent .7px); background-size: 16px 16px; }
-.architecture-stage { position: relative; display: grid; justify-items: stretch; min-width: 0; }
-.architecture-node { position: relative; z-index: 1; display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 11px; min-height: 76px; padding: 13px 14px; color: var(--ink); text-align: left; background: #191a20; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); box-shadow: 0 1px 2px rgba(0, 0, 0, .28); cursor: pointer; transition: background 150ms ease-out, border-color 150ms ease-out, transform 150ms ease-out; }
-.architecture-node:hover { background: var(--surface-2); border-color: rgba(255, 255, 255, .2); transform: translateY(-1px); }
-.architecture-node[aria-pressed="true"] { background: rgba(94, 106, 210, .14); border-color: rgba(123, 134, 235, .62); }
-.architecture-node__signal { width: 8px; height: 8px; background: var(--surface-3); border: 1px solid rgba(255, 255, 255, .2); border-radius: 2px; }
-.architecture-node[aria-pressed="true"] .architecture-node__signal { background: #7c86ea; border-color: #a4abf8; }
-.architecture-node > span:nth-child(2) { display: grid; gap: 6px; min-width: 0; }
-.architecture-node small { overflow: hidden; color: var(--muted); font: 500 9px/1 "Geist Mono Variable", monospace; letter-spacing: .055em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
-.architecture-node strong { overflow: hidden; font-size: 13px; font-weight: 560; text-overflow: ellipsis; white-space: nowrap; }
-.architecture-node > i { color: var(--muted); font-style: normal; font-size: 12px; opacity: 0; transform: translate(-3px, 3px); transition: opacity 150ms ease-out, transform 150ms ease-out; }
-.architecture-node:hover > i, .architecture-node[aria-pressed="true"] > i { opacity: 1; transform: none; }
-.architecture-node--secondary { min-height: 62px; background: rgba(22, 23, 28, .82); border-color: var(--line); box-shadow: none; }
-.architecture-stage__branch { width: 1px; height: 28px; justify-self: center; background: var(--line-strong); }
-.architecture-stage.active .architecture-stage__branch { background: rgba(123, 134, 235, .55); }
-.architecture-stage__edge { position: absolute; top: 29px; left: calc(100% + 8px); display: block; width: 56px; color: var(--muted); text-align: center; }
-.architecture-stage__edge small { position: absolute; right: 0; bottom: 8px; left: 0; font: 500 8px/1 "Geist Mono Variable", monospace; letter-spacing: .04em; }
-.architecture-stage__edge i { position: relative; display: block; height: 1px; margin-top: 10px; background: var(--line-strong); }
-.architecture-stage__edge i::after { position: absolute; top: -3px; right: 0; width: 5px; height: 5px; border-top: 1px solid var(--muted); border-right: 1px solid var(--muted); content: ""; transform: rotate(45deg); }
-
-.exchange-cycle { display: grid; grid-template-columns: 170px minmax(0, 1fr); align-items: stretch; border-top: 1px solid var(--line); }
-.exchange-cycle__label { display: grid; align-content: center; gap: 6px; padding: 14px 16px; background: rgba(255, 255, 255, .012); border-right: 1px solid var(--line); }
-.exchange-cycle__label span { color: var(--secondary); font-size: 11px; font-weight: 540; }
-.exchange-cycle__label small { color: var(--muted); font: 9px/1 "Geist Mono Variable", monospace; }
-.exchange-cycle ol { display: grid; grid-template-columns: repeat(6, minmax(90px, 1fr)); min-width: 0; margin: 0; padding: 0; overflow-x: auto; list-style: none; }
-.exchange-cycle li { position: relative; }
-.exchange-cycle li:not(:last-child)::after { position: absolute; top: 25px; right: -3px; z-index: 2; color: #555b66; content: "→"; font-size: 10px; pointer-events: none; }
-.exchange-cycle button { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 54px; color: var(--secondary); background: transparent; border: 0; border-right: 1px solid var(--line); cursor: pointer; font-size: 11px; transition: color 150ms ease-out, background 150ms ease-out; }
-.exchange-cycle li:last-child button { border-right: 0; }
-.exchange-cycle button:hover { color: var(--ink); background: rgba(255, 255, 255, .025); }
-.exchange-cycle button[aria-pressed="true"] { color: #cbd0ff; background: rgba(94, 106, 210, .1); box-shadow: inset 0 -2px #737ee3; }
-.exchange-cycle button span { color: var(--muted); font: 9px/1 "Geist Mono Variable", monospace; }
+.architecture-workbench__bar small { color: var(--muted); font-size: 10px; }
+.react-flow-canvas { height: 640px; background: #0d0e11; }
+.react-flow-canvas--flow { height: 560px; }
+.react-flow-canvas .react-flow { --xy-background-color: #0d0e11; --xy-controls-button-background-color-default: var(--surface-1); --xy-controls-button-background-color-hover-default: var(--surface-2); --xy-controls-button-color-default: var(--secondary); --xy-controls-button-color-hover-default: var(--ink); --xy-controls-button-border-color-default: var(--line); }
+.react-flow-canvas .react-flow__node { border-radius: var(--radius-sm); outline: none; }
+.react-flow-canvas .react-flow__node:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: 3px; }
+.react-flow-canvas .react-flow__node-layer { z-index: -1 !important; border-radius: var(--radius-md); }
+.flow-layer { width: 100%; height: 100%; padding: 14px 18px; background: rgba(255, 255, 255, .012); border: 1px solid var(--line); border-radius: var(--radius-md); }
+.flow-layer--platform { background: rgba(94, 106, 210, .035); border-color: rgba(123, 134, 235, .17); }
+.flow-layer--sites { background: rgba(255, 255, 255, .018); }
+.flow-layer strong { margin-right: 11px; color: var(--secondary); font-size: 11px; font-weight: 560; }
+.flow-layer span { color: var(--muted); font-size: 10px; }
+.flow-node { display: grid; grid-template-columns: 10px minmax(0, 1fr); align-items: center; gap: 10px; width: 100%; height: 100%; padding: 10px 12px; color: var(--ink); background: #191a20; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); box-shadow: 0 1px 2px rgba(0, 0, 0, .3); cursor: pointer; transition: background 150ms ease-out, border-color 150ms ease-out, transform 150ms ease-out; }
+.flow-node:hover { background: var(--surface-2); border-color: rgba(255, 255, 255, .2); transform: translateY(-1px); }
+.flow-node.selected { background: rgba(94, 106, 210, .15); border-color: rgba(123, 134, 235, .68); }
+.flow-node--agent { background: rgba(94, 106, 210, .09); border-color: rgba(123, 134, 235, .32); }
+.flow-node--site { background: #15161a; }
+.flow-node__mark { width: 8px; height: 8px; background: var(--surface-3); border: 1px solid rgba(255, 255, 255, .22); border-radius: 2px; }
+.flow-node--agent .flow-node__mark { background: #7c86ea; border-color: #a4abf8; transform: rotate(45deg); }
+.flow-node--federation .flow-node__mark { border-radius: 50%; }
+.flow-node--site .flow-node__mark { width: 6px; height: 6px; margin-left: 1px; background: var(--muted); border: 0; border-radius: 50%; }
+.flow-node__copy { display: grid; gap: 5px; min-width: 0; }
+.flow-node strong, .flow-node small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-node strong { font-size: 12px; font-weight: 560; }
+.flow-node small { color: var(--muted); font-size: 9px; }
+.flow-node .react-flow__handle { width: 1px; height: 1px; min-width: 1px; min-height: 1px; opacity: 0; }
+.react-flow-canvas .react-flow__edge-text { fill: #a2a7b0; font: 500 9px "Geist Mono Variable", monospace; }
+.react-flow-canvas .react-flow__edge-textbg { fill: #101116; fill-opacity: .96; stroke: var(--line); stroke-width: 1px; }
+.react-flow-canvas .react-flow__controls { overflow: hidden; background: var(--surface-1); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); box-shadow: 0 4px 18px rgba(0, 0, 0, .32); }
+.react-flow-canvas .react-flow__controls-button { border-bottom-color: var(--line); }
+.react-flow-canvas .react-flow__controls-button svg { fill: currentColor; }
 
 .architecture-inspector { display: grid; grid-template-columns: minmax(280px, 1.05fr) minmax(420px, 1.45fr); min-height: 150px; background: var(--surface-1); border-top: 1px solid var(--line-strong); }
 .architecture-inspector__summary { padding: 24px; animation: inspector-in 180ms cubic-bezier(.22, 1, .36, 1); }
@@ -412,10 +412,11 @@ td small { margin-top: 4px; }
   .timeline__node { grid-column: 1; grid-row: 1 / span 2; }
   .timeline__item > div { grid-column: 2; }
   .landing__header { align-items: flex-start; flex-direction: column; gap: 10px; }
-  .landing__hint { margin: 0; }
-  .architecture-graph { padding-right: 20px; padding-left: 20px; }
-  .exchange-cycle { grid-template-columns: 1fr; }
-  .exchange-cycle__label { grid-template-columns: auto 1fr; align-items: center; border-right: 0; border-bottom: 1px solid var(--line); }
+  .diagram-view-switch { width: 100%; }
+  .diagram-view-switch button { flex: 1; min-height: 40px; }
+  .architecture-workbench__bar { align-items: flex-start; flex-direction: column; justify-content: center; gap: 5px; min-height: 58px; }
+  .react-flow-canvas { height: 580px; }
+  .react-flow-canvas--flow { height: 520px; }
   .architecture-inspector dl { grid-template-columns: 1fr; }
   .architecture-inspector dl > div { padding: 15px 18px; border-right: 0; border-bottom: 1px solid var(--line); }
   .architecture-inspector dl > div:last-child { border-bottom: 0; }
@@ -423,4 +424,5 @@ td small { margin-top: 4px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
+  .react-flow__edge.animated path { animation: none !important; }
 }

@@ -1,4 +1,5 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import PlatformOverview from "./PlatformOverview";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
 
@@ -188,8 +189,8 @@ function Shell({ path, navigate }: {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <button className="brand" onClick={() => navigate("/")}><strong>FED</strong><span>Control Plane</span></button>
-        <p className="sidebar__label">Federation workspace</p>
+        <button className="brand" onClick={() => navigate("/")}><strong>FED</strong><span>联邦控制面</span></button>
+        <p className="sidebar__label">联邦工作区</p>
         <nav aria-label="主导航">
           <button className={path === "/" ? "active" : ""} onClick={() => navigate("/")}>概览</button>
           <button className={path === "/apps" || appMatch ? "active" : ""} onClick={() => navigate("/apps")}>应用</button>
@@ -198,12 +199,12 @@ function Shell({ path, navigate }: {
         </nav>
         <div className="sidebar__foot">
           <span className="connection"><i />API 已连接</span>
-          <span className="environment">Development</span>
+          <span className="environment">开发环境</span>
         </div>
       </aside>
       <main className="content">
         {path === "/" ? (
-          <LandingPage />
+          <PlatformOverview />
         ) : appMatch ? (
           <ApplicationDetail appId={decodeURIComponent(appMatch[1])} navigate={navigate} />
         ) : path === "/apps" ? (
@@ -213,211 +214,9 @@ function Shell({ path, navigate }: {
         ) : path === "/activity" ? (
           <ActivityPage />
         ) : (
-          <LandingPage />
+          <PlatformOverview />
         )}
       </main>
-    </div>
-  );
-}
-
-const architectureItems = {
-  application: {
-    category: "Application",
-    label: "联邦应用",
-    summary: "应用只声明要交换的 Artifact 和 Task；注册后，平台为它创建隔离的 Agent 上下文。",
-    scope: "app_id",
-    inputs: ["FedApp Manifest"],
-    outputs: ["Agent context"],
-  },
-  agent: {
-    category: "Per application",
-    label: "AppFederationAgent",
-    summary: "每个应用的联邦协调者，负责调度该应用的 Federation、Job 和插件，不跨应用共享状态。",
-    scope: "app_id",
-    inputs: ["Submission", "Event"],
-    outputs: ["Job", "Release"],
-  },
-  federation: {
-    category: "Isolation boundary",
-    label: "Federation",
-    summary: "应用内部的站点协作空间；Membership 决定每个站点可以提交、接收或执行什么。",
-    scope: "app_id + federation_id",
-    inputs: ["Membership"],
-    outputs: ["Permissions"],
-  },
-  sites: {
-    category: "Edge network",
-    label: "站点网络",
-    summary: "站点通过稳定 Adapter API 与平台双向通信，不需要理解平台内部的 Agent 或插件实现。",
-    scope: "site_id + membership",
-    inputs: ["Command", "Release"],
-    outputs: ["Artifact", "Ack"],
-  },
-  contract: {
-    category: "Protocol",
-    label: "Registry & Contract",
-    summary: "保存应用版本及能力声明，并在所有入口校验 ArtifactType、TaskType 和格式版本。",
-    scope: "versioned manifest",
-    inputs: ["Manifest"],
-    outputs: ["Validated contract"],
-  },
-  strategy: {
-    category: "Plugin slot",
-    label: "Federation Strategy",
-    summary: "Agent 按应用绑定联邦算法与 Artifact Handler；Memory、Skill 或模型权重都走同一插件位置。",
-    scope: "application binding",
-    inputs: ["Artifact set"],
-    outputs: ["Federated result"],
-  },
-  storage: {
-    category: "Persistence",
-    label: "Data & Artifact Store",
-    summary: "PostgreSQL 保存关系、状态和审计；S3-compatible storage 保存不可变 Artifact 内容。",
-    scope: "tenant-safe keys",
-    inputs: ["Metadata", "Binary"],
-    outputs: ["Digest", "Object URL"],
-  },
-  delivery: {
-    category: "Distribution",
-    label: "Release & Delivery",
-    summary: "把联邦结果组成不可变 Release，为目标站点创建 Delivery，并跟踪 stage、activate 和 rollback。",
-    scope: "release_id + site_id",
-    inputs: ["Artifacts", "Targets"],
-    outputs: ["Command", "Delivery state"],
-  },
-  submit: {
-    category: "Exchange 01",
-    label: "提交",
-    summary: "站点按应用契约上传 Artifact，并携带 digest、metadata 与幂等键。",
-    scope: "site → platform",
-    inputs: ["Artifact"],
-    outputs: ["Submission"],
-  },
-  validate: {
-    category: "Exchange 02",
-    label: "校验",
-    summary: "平台校验凭据、Membership 权限、类型、格式版本、大小和 digest。",
-    scope: "trust boundary",
-    inputs: ["Submission"],
-    outputs: ["Accepted event"],
-  },
-  persist: {
-    category: "Exchange 03",
-    label: "存储",
-    summary: "业务元数据进入 PostgreSQL，Artifact 内容进入对象存储，二者由 digest 关联。",
-    scope: "immutable artifact",
-    inputs: ["Event", "Content"],
-    outputs: ["Artifact record"],
-  },
-  federate: {
-    category: "Exchange 04",
-    label: "联邦",
-    summary: "应用 Agent 领取 Job，调用已绑定策略处理该 Federation 内的 Artifact。",
-    scope: "application agent",
-    inputs: ["Artifact set"],
-    outputs: ["Result artifacts"],
-  },
-  distribute: {
-    category: "Exchange 05",
-    label: "分发",
-    summary: "平台创建 Release 和逐站点 Delivery，站点通过 Command 拉取目标版本。",
-    scope: "platform → sites",
-    inputs: ["Release"],
-    outputs: ["Delivery", "Command"],
-  },
-  acknowledge: {
-    category: "Exchange 06",
-    label: "确认",
-    summary: "站点完成 stage 或 activate 后返回 Ack；失败与回滚保留完整历史。",
-    scope: "site → platform",
-    inputs: ["Command result"],
-    outputs: ["Ack", "Audit event"],
-  },
-} as const;
-
-type ArchitectureItemId = keyof typeof architectureItems;
-
-const architectureStages: Array<{ primary: ArchitectureItemId; support: ArchitectureItemId; edge?: string }> = [
-  { primary: "application", support: "contract", edge: "register" },
-  { primary: "agent", support: "strategy", edge: "coordinate" },
-  { primary: "federation", support: "storage", edge: "membership" },
-  { primary: "sites", support: "delivery" },
-];
-
-const exchangeSteps: ArchitectureItemId[] = ["submit", "validate", "persist", "federate", "distribute", "acknowledge"];
-
-function ArchitectureNode({ id, selected, onSelect, secondary = false }: {
-  id: ArchitectureItemId;
-  selected: boolean;
-  onSelect: (id: ArchitectureItemId) => void;
-  secondary?: boolean;
-}) {
-  const item = architectureItems[id];
-  return (
-    <button className={`architecture-node${secondary ? " architecture-node--secondary" : ""}`} type="button" aria-pressed={selected} onClick={() => onSelect(id)}>
-      <span className="architecture-node__signal" aria-hidden="true" />
-      <span><small>{item.category}</small><strong>{item.label}</strong></span>
-      <i aria-hidden="true">↗</i>
-    </button>
-  );
-}
-
-function LandingPage() {
-  const [selected, setSelected] = useState<ArchitectureItemId>("agent");
-  const item = architectureItems[selected];
-  return (
-    <div className="landing">
-      <header className="landing__header">
-        <div>
-          <p className="eyebrow">Platform overview</p>
-          <h1 id="platform-title">Federation Control Plane</h1>
-          <p>每个应用拥有独立 Agent；平台统一完成跨站点收集、联邦与分发。</p>
-        </div>
-        <p className="landing__hint"><span aria-hidden="true" />选择节点查看职责与数据边界</p>
-      </header>
-
-      <section className="architecture-workbench" id="platform-architecture" aria-labelledby="platform-title">
-        <div className="architecture-workbench__bar">
-          <span>Architecture</span>
-          <code>app_id / federation_id</code>
-        </div>
-        <div className="architecture-graph">
-          {architectureStages.map((stage) => (
-            <div className={`architecture-stage${selected === stage.primary || selected === stage.support ? " active" : ""}`} key={stage.primary}>
-              <ArchitectureNode id={stage.primary} selected={selected === stage.primary} onSelect={setSelected} />
-              {stage.edge && <span className="architecture-stage__edge" aria-hidden="true"><small>{stage.edge}</small><i /></span>}
-              <span className="architecture-stage__branch" aria-hidden="true" />
-              <ArchitectureNode id={stage.support} selected={selected === stage.support} onSelect={setSelected} secondary />
-            </div>
-          ))}
-        </div>
-
-        <div className="exchange-cycle">
-          <div className="exchange-cycle__label"><span>Exchange cycle</span><small>site → platform → site</small></div>
-          <ol>
-            {exchangeSteps.map((id, index) => (
-              <li key={id}>
-                <button type="button" aria-pressed={selected === id} onClick={() => setSelected(id)}>
-                  <span>{String(index + 1).padStart(2, "0")}</span>{architectureItems[id].label}
-                </button>
-              </li>
-            ))}
-          </ol>
-        </div>
-
-        <section className="architecture-inspector" aria-live="polite" aria-atomic="true">
-          <div className="architecture-inspector__summary" key={selected}>
-            <span>{item.category}</span>
-            <h2>{item.label}</h2>
-            <p>{item.summary}</p>
-          </div>
-          <dl>
-            <div><dt>Scope</dt><dd><code>{item.scope}</code></dd></div>
-            <div><dt>Receives</dt><dd>{item.inputs.map((value) => <span key={value}>{value}</span>)}</dd></div>
-            <div><dt>Produces</dt><dd>{item.outputs.map((value) => <span key={value}>{value}</span>)}</dd></div>
-          </dl>
-        </section>
-      </section>
     </div>
   );
 }
