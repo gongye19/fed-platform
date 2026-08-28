@@ -315,17 +315,18 @@ td small { margin-top: 4px; }
 .landing__header { display: flex; align-items: end; justify-content: space-between; gap: 32px; margin-bottom: 22px; }
 .landing__header h1 { margin-bottom: 7px; font-size: 32px; }
 .landing__header > div > p:last-child { margin: 0; color: var(--secondary); font-size: 14px; }
-.diagram-view-switch { display: inline-flex; padding: 3px; background: var(--surface-1); border: 1px solid var(--line-strong); border-radius: 8px; }
-.diagram-view-switch button { min-height: 32px; padding: 0 12px; color: var(--muted); background: transparent; border: 0; border-radius: 5px; cursor: pointer; font-size: 12px; transition: color 150ms ease-out, background 150ms ease-out; }
-.diagram-view-switch button:hover { color: var(--secondary); }
-.diagram-view-switch button[aria-pressed="true"] { color: var(--ink); background: var(--surface-3); box-shadow: 0 1px 2px rgba(0, 0, 0, .28); }
 
 .architecture-workbench { overflow: hidden; background: #101116; border: 1px solid var(--line-strong); border-radius: var(--radius-md); box-shadow: 0 1px 2px rgba(0, 0, 0, .3); }
-.architecture-workbench__bar { display: flex; align-items: center; justify-content: space-between; min-height: 42px; padding: 0 16px; color: var(--secondary); background: rgba(255, 255, 255, .018); border-bottom: 1px solid var(--line); font-size: 12px; }
+.architecture-workbench--following { margin-top: 24px; }
+.architecture-workbench__bar { display: flex; align-items: center; justify-content: space-between; min-height: 58px; padding: 0 16px; color: var(--secondary); background: rgba(255, 255, 255, .018); border-bottom: 1px solid var(--line); }
+.architecture-workbench__bar > div { display: grid; gap: 4px; }
+.architecture-workbench__bar h2 { margin: 0; color: var(--ink); font-size: 13px; }
+.architecture-workbench__bar span { color: var(--muted); font-size: 11px; }
 .architecture-workbench__bar small { color: var(--muted); font-size: 10px; }
-.react-flow-canvas { height: 640px; background: #0d0e11; }
+.fixed-diagram-scroll { overflow-x: auto; }
+.react-flow-canvas { min-width: 900px; height: 640px; background: #0d0e11; }
 .react-flow-canvas--flow { height: 560px; }
-.react-flow-canvas .react-flow { --xy-background-color: #0d0e11; --xy-controls-button-background-color-default: var(--surface-1); --xy-controls-button-background-color-hover-default: var(--surface-2); --xy-controls-button-color-default: var(--secondary); --xy-controls-button-color-hover-default: var(--ink); --xy-controls-button-border-color-default: var(--line); }
+.react-flow-canvas .react-flow { --xy-background-color: #0d0e11; }
 .react-flow-canvas .react-flow__node { border-radius: var(--radius-sm); outline: none; }
 .react-flow-canvas .react-flow__node:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: 3px; }
 .react-flow-canvas .react-flow__node-layer { z-index: -1 !important; border-radius: var(--radius-md); }
@@ -350,9 +351,6 @@ td small { margin-top: 4px; }
 .flow-node .react-flow__handle { width: 1px; height: 1px; min-width: 1px; min-height: 1px; opacity: 0; }
 .react-flow-canvas .react-flow__edge-text { fill: #a2a7b0; font: 500 9px "Geist Mono Variable", monospace; }
 .react-flow-canvas .react-flow__edge-textbg { fill: #101116; fill-opacity: .96; stroke: var(--line); stroke-width: 1px; }
-.react-flow-canvas .react-flow__controls { overflow: hidden; background: var(--surface-1); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); box-shadow: 0 4px 18px rgba(0, 0, 0, .32); }
-.react-flow-canvas .react-flow__controls-button { border-bottom-color: var(--line); }
-.react-flow-canvas .react-flow__controls-button svg { fill: currentColor; }
 
 .architecture-inspector { display: grid; grid-template-columns: minmax(280px, 1.05fr) minmax(420px, 1.45fr); min-height: 150px; background: var(--surface-1); border-top: 1px solid var(--line-strong); }
 .architecture-inspector__summary { padding: 24px; animation: inspector-in 180ms cubic-bezier(.22, 1, .36, 1); }
@@ -412,11 +410,7 @@ td small { margin-top: 4px; }
   .timeline__node { grid-column: 1; grid-row: 1 / span 2; }
   .timeline__item > div { grid-column: 2; }
   .landing__header { align-items: flex-start; flex-direction: column; gap: 10px; }
-  .diagram-view-switch { width: 100%; }
-  .diagram-view-switch button { flex: 1; min-height: 40px; }
   .architecture-workbench__bar { align-items: flex-start; flex-direction: column; justify-content: center; gap: 5px; min-height: 58px; }
-  .react-flow-canvas { height: 580px; }
-  .react-flow-canvas--flow { height: 520px; }
   .architecture-inspector dl { grid-template-columns: 1fr; }
   .architecture-inspector dl > div { padding: 15px 18px; border-right: 0; border-bottom: 1px solid var(--line); }
   .architecture-inspector dl > div:last-child { border-bottom: 0; }

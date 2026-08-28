@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   Background,
   BackgroundVariant,
-  Controls,
   Handle,
   MarkerType,
   Position,
@@ -82,7 +81,6 @@ const moduleDetails = {
 } as const;
 
 type ModuleId = keyof typeof moduleDetails;
-type DiagramView = "hierarchy" | "flow";
 type DiagramNodeData = {
   title: string;
   subtitle: string;
@@ -246,78 +244,84 @@ const flowEdges: Edge[] = [
   ...[1, 2, 3].map((site) => horizontalEdge(`delivery-site-${site}`, "delivery", `receive-site-${site}`, site === 2 ? "分发" : undefined)),
 ];
 
-const diagrams = {
-  hierarchy: { nodes: hierarchyNodes, edges: hierarchyEdges },
-  flow: { nodes: flowNodes, edges: flowEdges },
-};
+function FixedDiagram({ kind, nodes, edges, onSelect }: {
+  kind: "hierarchy" | "flow";
+  nodes: DiagramNode[];
+  edges: Edge[];
+  onSelect: (id: ModuleId) => void;
+}) {
+  const onNodeClick: NodeMouseHandler<DiagramNode> = (_event, node) => {
+    if (node.type === "platform") onSelect(node.data.moduleId);
+  };
+
+  return (
+    <div className="fixed-diagram-scroll">
+      <div className={`react-flow-canvas react-flow-canvas--${kind}`}>
+        <ReactFlow<DiagramNode, Edge>
+          defaultNodes={nodes}
+          defaultEdges={edges}
+          nodeTypes={nodeTypes}
+          onNodeClick={onNodeClick}
+          fitView
+          fitViewOptions={{ padding: 0.04 }}
+          minZoom={0.2}
+          maxZoom={1}
+          panOnDrag={false}
+          panOnScroll={false}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          zoomOnDoubleClick={false}
+          preventScrolling={false}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          edgesReconnectable={false}
+          edgesFocusable={false}
+          deleteKeyCode={null}
+          colorMode="dark"
+          proOptions={{ hideAttribution: true }}
+          ariaLabelConfig={{ "node.a11yDescription.default": "按回车选择节点，使用方向键在节点间移动" }}
+        >
+          <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="rgba(255,255,255,.045)" />
+        </ReactFlow>
+      </div>
+    </div>
+  );
+}
+
+function ArchitectureInspector({ selected }: { selected: ModuleId }) {
+  const detail = moduleDetails[selected];
+  return (
+    <section className="architecture-inspector" aria-live="polite" aria-atomic="true">
+      <div className="architecture-inspector__summary" key={selected}><span>{detail.category}</span><h2>{detail.title}</h2><p>{detail.summary}</p></div>
+      <dl>
+        <div><dt>作用范围</dt><dd><code>{detail.scope}</code></dd></div>
+        <div><dt>接收</dt><dd>{detail.inputs.map((value) => <span key={value}>{value}</span>)}</dd></div>
+        <div><dt>产出</dt><dd>{detail.outputs.map((value) => <span key={value}>{value}</span>)}</dd></div>
+      </dl>
+    </section>
+  );
+}
 
 export default function PlatformOverview() {
-  const [view, setView] = useState<DiagramView>("hierarchy");
-  const [selected, setSelected] = useState<ModuleId>("agent");
-  const detail = moduleDetails[selected];
-  const diagram = diagrams[view];
-
-  const changeView = (next: DiagramView) => {
-    setView(next);
-    setSelected(next === "hierarchy" ? "agent" : "gateway");
-  };
-
-  const onNodeClick: NodeMouseHandler<DiagramNode> = (_event, node) => {
-    if (node.type === "platform") setSelected(node.data.moduleId);
-  };
+  const [hierarchySelected, setHierarchySelected] = useState<ModuleId>("agent");
+  const [flowSelected, setFlowSelected] = useState<ModuleId>("gateway");
 
   return (
     <div className="landing">
       <header className="landing__header">
         <div><p className="eyebrow">平台概览</p><h1 id="platform-title">联邦平台架构</h1><p>应用彼此隔离；每个应用拥有独立联邦代理，只聚合该应用各站点的数据。</p></div>
-        <div className="diagram-view-switch" role="group" aria-label="选择架构视图">
-          <button type="button" aria-pressed={view === "hierarchy"} onClick={() => changeView("hierarchy")}>组织层级</button>
-          <button type="button" aria-pressed={view === "flow"} onClick={() => changeView("flow")}>数据流动</button>
-        </div>
       </header>
 
-      <section className="architecture-workbench" id="platform-architecture" aria-labelledby="platform-title">
-        <div className="architecture-workbench__bar"><span>{view === "hierarchy" ? "应用、代理、联邦域与站点的归属关系" : "同一应用内从站点提交到结果分发的完整通道"}</span><small>点击节点查看说明 · 拖动画布或使用右下角缩放</small></div>
-        <div className={`react-flow-canvas react-flow-canvas--${view}`}>
-          <ReactFlow<DiagramNode, Edge>
-            key={view}
-            defaultNodes={diagram.nodes}
-            defaultEdges={diagram.edges}
-            nodeTypes={nodeTypes}
-            onNodeClick={onNodeClick}
-            fitView
-            fitViewOptions={{ padding: 0.04, duration: 320 }}
-            minZoom={0.58}
-            maxZoom={1.35}
-            nodesDraggable={false}
-            nodesConnectable={false}
-            edgesReconnectable={false}
-            zoomOnScroll={false}
-            zoomOnDoubleClick={false}
-            deleteKeyCode={null}
-            colorMode="dark"
-            proOptions={{ hideAttribution: true }}
-            ariaLabelConfig={{
-              "controls.ariaLabel": "画布控制",
-              "controls.zoomIn.ariaLabel": "放大",
-              "controls.zoomOut.ariaLabel": "缩小",
-              "controls.fitView.ariaLabel": "适应画布",
-              "node.a11yDescription.default": "按回车选择节点，使用方向键在节点间移动",
-            }}
-          >
-            <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="rgba(255,255,255,.045)" />
-            <Controls position="bottom-right" showInteractive={false} aria-label="画布控制" />
-          </ReactFlow>
-        </div>
+      <section className="architecture-workbench" id="platform-architecture" aria-labelledby="hierarchy-title">
+        <div className="architecture-workbench__bar"><div><h2 id="hierarchy-title">组织层级</h2><span>应用、代理、联邦域与站点的归属关系</span></div><small>点击节点查看说明</small></div>
+        <FixedDiagram kind="hierarchy" nodes={hierarchyNodes} edges={hierarchyEdges} onSelect={setHierarchySelected} />
+        <ArchitectureInspector selected={hierarchySelected} />
+      </section>
 
-        <section className="architecture-inspector" aria-live="polite" aria-atomic="true">
-          <div className="architecture-inspector__summary" key={`${view}-${selected}`}><span>{detail.category}</span><h2>{detail.title}</h2><p>{detail.summary}</p></div>
-          <dl>
-            <div><dt>作用范围</dt><dd><code>{detail.scope}</code></dd></div>
-            <div><dt>接收</dt><dd>{detail.inputs.map((value) => <span key={value}>{value}</span>)}</dd></div>
-            <div><dt>产出</dt><dd>{detail.outputs.map((value) => <span key={value}>{value}</span>)}</dd></div>
-          </dl>
-        </section>
+      <section className="architecture-workbench architecture-workbench--following" id="platform-data-flow" aria-labelledby="flow-title">
+        <div className="architecture-workbench__bar"><div><h2 id="flow-title">数据流动</h2><span>同一应用内从站点提交到结果分发的完整通道</span></div><small>点击节点查看说明</small></div>
+        <FixedDiagram kind="flow" nodes={flowNodes} edges={flowEdges} onSelect={setFlowSelected} />
+        <ArchitectureInspector selected={flowSelected} />
       </section>
     </div>
   );
