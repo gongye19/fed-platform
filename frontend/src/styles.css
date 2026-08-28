@@ -97,8 +97,6 @@ small { color: var(--muted); }
 .sidebar__foot { display: grid; gap: 14px; margin-top: auto; padding: 18px 10px 0; border-top: 1px solid #2b4145; }
 .connection { display: flex; align-items: center; gap: 8px; color: #a9bcba; font-size: 12px; }
 .connection i { width: 7px; height: 7px; background: #62b9ae; border-radius: 50%; }
-.text-button { padding: 0; color: #829b98; text-align: left; background: none; border: 0; cursor: pointer; font-size: 12px; }
-.text-button:hover { color: #fff; }
 
 .content { min-height: 100vh; margin-left: 224px; padding: 48px clamp(28px, 4vw, 68px) 80px; }
 .page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 30px; max-width: 1280px; margin: 0 auto 34px; }
@@ -273,19 +271,6 @@ td small { margin-top: 4px; }
 .checks input { width: 16px; min-height: auto; }
 .credential { display: block; padding: 14px; overflow-wrap: anywhere; color: #d1ede9; background: #173034; border-radius: 5px; }
 
-.login { display: grid; grid-template-columns: minmax(320px, 540px) 1fr; min-height: 100vh; background: var(--paper); }
-.login__panel { display: flex; flex-direction: column; justify-content: center; padding: clamp(32px, 7vw, 96px); border-right: 1px solid var(--line-dark); }
-.brand--large { margin-bottom: 74px; color: var(--ink); }
-.login h1 { max-width: 400px; font-size: clamp(40px, 5vw, 62px); }
-.login .lede { max-width: 430px; margin-bottom: 30px; }
-.login .stack { max-width: 430px; }
-.login__endpoint { margin-top: 24px; color: var(--muted); font-size: 10px; }
-.login__map { position: relative; display: flex; align-items: center; justify-content: center; gap: 0; overflow: hidden; padding: 50px; color: #c1d8d4; background: #173034; font: 700 10px/1 "IBM Plex Mono", monospace; letter-spacing: .1em; }
-.login__map > span { z-index: 1; padding: 16px; background: #214044; border: 1px solid #4e6e6b; }
-.login__map > i { width: 8vw; height: 1px; background: #678985; }
-.login__map > div { position: absolute; right: 12%; bottom: 17%; left: 12%; display: flex; justify-content: space-between; }
-.login__map b { position: relative; padding: 14px; background: #1d393d; border: 1px solid #44635f; }
-.login__map b::before { position: absolute; top: -22vh; left: 50%; width: 1px; height: 22vh; background: #496864; content: ""; }
 
 @media (max-width: 980px) {
   .sidebar { position: sticky; top: 0; width: 100%; height: auto; flex-direction: row; align-items: center; padding: 13px 18px; }
@@ -300,9 +285,6 @@ td small { margin-top: 4px; }
   .topology__site { grid-template-columns: 1fr; gap: 8px; }
   .release-layout, .contract { grid-template-columns: 1fr; }
   .release-compose { position: static; }
-  .login { grid-template-columns: 1fr; }
-  .login__panel { min-height: 100vh; border-right: 0; }
-  .login__map { display: none; }
 }
 
 @media (max-width: 640px) {
@@ -329,8 +311,6 @@ td small { margin-top: 4px; }
   .timeline__item time { grid-column: 2; grid-row: 1; }
   .timeline__node { grid-column: 1; grid-row: 1 / span 2; }
   .timeline__item > div { grid-column: 2; }
-  .login__panel { padding: 32px 22px; }
-  .brand--large { margin-bottom: 64px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

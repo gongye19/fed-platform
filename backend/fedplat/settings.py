@@ -23,6 +23,7 @@ class Settings:
     s3_secret_access_key: str
     s3_url_style: str
     max_artifact_bytes: int
+    admin_auth_disabled: bool = False
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -35,6 +36,10 @@ class Settings:
         max_bytes = int(os.environ.get("FEDPLAT_MAX_ARTIFACT_BYTES", 512 * 1024 * 1024))
         if max_bytes <= 0:
             raise RuntimeError("FEDPLAT_MAX_ARTIFACT_BYTES must be positive")
+
+        auth_disabled = os.environ.get("FEDPLAT_ADMIN_AUTH_DISABLED", "false").strip().lower()
+        if auth_disabled not in {"true", "false"}:
+            raise RuntimeError("FEDPLAT_ADMIN_AUTH_DISABLED must be true or false")
 
         admin_token = _required("FEDPLAT_ADMIN_TOKEN")
         if len(admin_token) < 24:
@@ -50,6 +55,7 @@ class Settings:
             s3_secret_access_key=_required("FEDPLAT_S3_SECRET_ACCESS_KEY"),
             s3_url_style=style,
             max_artifact_bytes=max_bytes,
+            admin_auth_disabled=auth_disabled == "true",
         )
 
 

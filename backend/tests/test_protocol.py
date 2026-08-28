@@ -1,7 +1,9 @@
 import pytest
 from pydantic import ValidationError
 
+from fedplat.app import require_admin
 from fedplat.protocol import CommandAck, FedAppManifest, ReleaseCreate, json_digest
+from fedplat.settings import Settings
 
 
 def test_manifest_derives_and_checks_schema_digest():
@@ -38,3 +40,20 @@ def test_release_and_ack_boundaries():
         ReleaseCreate(artifact_digests=[digest, digest])
     with pytest.raises(ValidationError):
         CommandAck(result="failed")
+
+
+def test_admin_auth_can_be_disabled_explicitly():
+    settings = Settings(
+        database_url="postgresql://unused",
+        admin_token="x" * 24,
+        s3_endpoint="https://example.invalid",
+        s3_bucket="unused",
+        s3_region="auto",
+        s3_access_key_id="unused",
+        s3_secret_access_key="unused",
+        s3_url_style="virtual",
+        max_artifact_bytes=1,
+        admin_auth_disabled=True,
+    )
+
+    assert require_admin(settings, None) is None

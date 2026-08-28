@@ -1,6 +1,6 @@
 import { bucket, defineRailway, github, postgres, preserve, project, service, volume } from "railway/iac";
 
-export default defineRailway(() => {
+export default defineRailway((ctx) => {
   const postgresDb = postgres("Postgres", { region: "asia-southeast1-eqsg3a" });
   const postgresVolume = volume("postgres-volume", {
     alerts: { usage: { "80": {}, "95": {}, "100": {} } },
@@ -24,6 +24,7 @@ export default defineRailway(() => {
     replicas: { "asia-southeast1-eqsg3a": 1 },
     env: {
       FEDPLAT_ADMIN_TOKEN: preserve(),
+      FEDPLAT_ADMIN_AUTH_DISABLED: ctx.isEnvironment("development") ? "true" : "false",
       FEDPLAT_CORS_ORIGINS: "https://fed-console-development.up.railway.app",
       FEDPLAT_DATABASE_URL: preserve(),
       FEDPLAT_MAX_ARTIFACT_BYTES: preserve(),

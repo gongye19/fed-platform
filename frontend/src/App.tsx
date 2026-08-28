@@ -1,7 +1,6 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
-const TOKEN_KEY = "fedplat.admin-token";
 
 type Json = Record<string, unknown>;
 type Application = {
@@ -94,11 +93,10 @@ class ApiError extends Error {
   }
 }
 
-async function api<T>(token: string, path: string, init: RequestInit = {}): Promise<T> {
+async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${token}`,
       ...(init.body ? { "Content-Type": "application/json" } : {}),
       ...init.headers,
     },
@@ -182,51 +180,9 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
   );
 }
 
-function Login({ onLogin }: { onLogin: (token: string) => void }) {
-  const [token, setToken] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError("");
-    try {
-      await api(token, "/admin/v1/apps?limit=1");
-      sessionStorage.setItem(TOKEN_KEY, token);
-      onLogin(token);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "无法连接平台");
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <main className="login">
-      <section className="login__panel">
-        <div className="brand brand--large"><span className="brand__signal" />FEDERATION / CONTROL</div>
-        <p className="eyebrow">FedAgent Platform</p>
-        <h1>进入联邦控制台</h1>
-        <p className="lede">查看应用、站点与发布通道。管理员凭据只保存在当前浏览器会话中。</p>
-        <form onSubmit={submit} className="stack">
-          <label>管理员 Token<input type="password" value={token} onChange={(event) => setToken(event.target.value)} autoComplete="current-password" required minLength={24} autoFocus /></label>
-          {error && <ErrorMessage error={error} />}
-          <button className="button button--primary" disabled={busy}>{busy ? "正在验证…" : "连接平台"}</button>
-        </form>
-        <p className="login__endpoint mono">API · {API_URL}</p>
-      </section>
-      <aside className="login__map" aria-label="联邦通道结构">
-        <span>APPLICATION</span><i /><span>AGENT CORE</span><i /><span>FEDERATION</span>
-        <div><b>SITE HK</b><b>SITE SG</b><b>SITE LAB</b></div>
-      </aside>
-    </main>
-  );
-}
-
-function Shell({ token, path, navigate, onLogout }: {
-  token: string;
+function Shell({ path, navigate }: {
   path: string;
   navigate: (path: string) => void;
-  onLogout: () => void;
 }) {
   const appMatch = path.match(/^\/apps\/([^/]+)$/);
   return (
@@ -241,18 +197,17 @@ function Shell({ token, path, navigate, onLogout }: {
         </nav>
         <div className="sidebar__foot">
           <span className="connection"><i />API 已连接</span>
-          <button className="text-button" onClick={onLogout}>退出当前会话</button>
         </div>
       </aside>
       <main className="content">
         {appMatch ? (
-          <ApplicationDetail token={token} appId={decodeURIComponent(appMatch[1])} navigate={navigate} />
+          <ApplicationDetail appId={decodeURIComponent(appMatch[1])} navigate={navigate} />
         ) : path === "/sites" ? (
-          <SitesPage token={token} />
+          <SitesPage />
         ) : path === "/activity" ? (
-          <ActivityPage token={token} />
+          <ActivityPage />
         ) : (
-          <ApplicationsPage token={token} navigate={navigate} />
+          <ApplicationsPage navigate={navigate} />
         )}
       </main>
     </div>
@@ -268,7 +223,7 @@ function PageHeader({ eyebrow, title, meta, action }: { eyebrow: string; title: 
   );
 }
 
-function ApplicationsPage({ token, navigate }: { token: string; navigate: (path: string) => void }) {
+function ApplicationsPage({ navigate }: { navigate: (path: string) => void }) {
   const [items, setItems] = useState<Application[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -277,7 +232,7 @@ function ApplicationsPage({ token, navigate }: { token: string; navigate: (path:
   const load = async () => {
     setLoading(true);
     try {
-      const data = await api<{ items: Application[] }>(token, "/admin/v1/apps?limit=100");
+      const data = await api<{ items: Application[] }>("/admin/v1/apps?limit=100");
       setItems(data.items);
       setError("");
     } catch (reason) {
@@ -286,7 +241,7 @@ function ApplicationsPage({ token, navigate }: { token: string; navigate: (path:
       setLoading(false);
     }
   };
-  useEffect(() => { void load(); }, [token]);
+  useEffect(() => { void load(); }, []);
   const visible = items.filter((item) => `${item.app_id} ${item.display_name}`.toLowerCase().includes(query.toLowerCase()));
   return (
     <>
@@ -308,7 +263,7 @@ function ApplicationsPage({ token, navigate }: { token: string; navigate: (path:
           </button>
         ))}
       </section>
-      {registering && <RegisterApplication token={token} onClose={() => setRegistering(false)} onCreated={async () => { setRegistering(false); await load(); }} />}
+      {registering && <RegisterApplication onClose={() => setRegistering(false)} onCreated={async () => { setRegistering(false); await load(); }} />}
     </>
   );
 }
@@ -323,14 +278,14 @@ const sampleManifest = JSON.stringify({
   task_types: [],
 }, null, 2);
 
-function RegisterApplication({ token, onClose, onCreated }: { token: string; onClose: () => void; onCreated: () => void }) {
+function RegisterApplication({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [manifest, setManifest] = useState(sampleManifest);
   const [error, setError] = useState("");
   async function submit(event: FormEvent) {
     event.preventDefault();
     try {
       const body = JSON.parse(manifest);
-      await api(token, "/admin/v1/apps", { method: "POST", body: JSON.stringify(body) });
+      await api("/admin/v1/apps", { method: "POST", body: JSON.stringify(body) });
       onCreated();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Manifest 无效");
@@ -339,23 +294,23 @@ function RegisterApplication({ token, onClose, onCreated }: { token: string; onC
   return <Modal title="注册应用契约" onClose={onClose}><form onSubmit={submit} className="stack"><p className="hint">提交完整 FedApp Manifest。相同版本注册后不可改变语义。</p><label>Manifest JSON<textarea className="code-field" value={manifest} onChange={(event) => setManifest(event.target.value)} rows={18} spellCheck={false} /></label>{error && <ErrorMessage error={error} />}<div className="dialog__actions"><button type="button" className="button button--quiet" onClick={onClose}>取消</button><button className="button button--primary">注册应用</button></div></form></Modal>;
 }
 
-function SitesPage({ token }: { token: string }) {
+function SitesPage() {
   const [items, setItems] = useState<Site[]>([]);
   const [error, setError] = useState("");
   const [registering, setRegistering] = useState(false);
   const [credential, setCredential] = useState<{ site: string; token: string } | null>(null);
   const load = async () => {
     try {
-      setItems((await api<{ items: Site[] }>(token, "/admin/v1/sites?limit=100")).items);
+      setItems((await api<{ items: Site[] }>("/admin/v1/sites?limit=100")).items);
       setError("");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "加载失败"); }
   };
-  useEffect(() => { void load(); }, [token]);
+  useEffect(() => { void load(); }, []);
   async function register(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     try {
-      const result = await api<{ site_id: string; api_key: string }>(token, "/admin/v1/sites", { method: "POST", body: JSON.stringify({ site_id: form.get("site_id"), display_name: form.get("display_name") }) });
+      const result = await api<{ site_id: string; api_key: string }>("/admin/v1/sites", { method: "POST", body: JSON.stringify({ site_id: form.get("site_id"), display_name: form.get("display_name") }) });
       setRegistering(false);
       setCredential({ site: result.site_id, token: result.api_key });
       await load();
@@ -370,14 +325,14 @@ function SitesPage({ token }: { token: string }) {
   </>;
 }
 
-function ActivityPage({ token }: { token: string }) {
+function ActivityPage() {
   const [items, setItems] = useState<Activity[]>([]);
   const [error, setError] = useState("");
   const load = async () => {
-    try { setItems((await api<{ items: Activity[] }>(token, "/admin/v1/activity?limit=100")).items); setError(""); }
+    try { setItems((await api<{ items: Activity[] }>("/admin/v1/activity?limit=100")).items); setError(""); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "加载失败"); }
   };
-  useEffect(() => { void load(); }, [token]);
+  useEffect(() => { void load(); }, []);
   return <>
     <PageHeader eyebrow="Operations / Activity" title="活动" meta="注册、提交、发布与投递状态的统一时间线" action={<button className="button button--quiet" onClick={load}>刷新</button>} />
     {error && <ErrorMessage error={error} />}
@@ -385,7 +340,7 @@ function ActivityPage({ token }: { token: string }) {
   </>;
 }
 
-function ApplicationDetail({ token, appId, navigate }: { token: string; appId: string; navigate: (path: string) => void }) {
+function ApplicationDetail({ appId, navigate }: { appId: string; navigate: (path: string) => void }) {
   const [topology, setTopology] = useState<Topology | null>(null);
   const [sites, setSites] = useState<Site[]>([]);
   const [federationId, setFederationId] = useState("");
@@ -402,8 +357,8 @@ function ApplicationDetail({ token, appId, navigate }: { token: string; appId: s
   const loadTopology = async () => {
     try {
       const [nextTopology, nextSites] = await Promise.all([
-        api<Topology>(token, `/admin/v1/apps/${encodeURIComponent(appId)}/topology`),
-        api<{ items: Site[] }>(token, "/admin/v1/sites?limit=100"),
+        api<Topology>(`/admin/v1/apps/${encodeURIComponent(appId)}/topology`),
+        api<{ items: Site[] }>("/admin/v1/sites?limit=100"),
       ]);
       setTopology(nextTopology);
       setSites(nextSites.items);
@@ -416,8 +371,8 @@ function ApplicationDetail({ token, appId, navigate }: { token: string; appId: s
     try {
       const base = `/admin/v1/apps/${encodeURIComponent(appId)}/federations/${encodeURIComponent(federationId)}`;
       const [submissionData, releaseData] = await Promise.all([
-        api<{ items: Submission[] }>(token, `${base}/submissions?limit=100`),
-        api<{ items: ReleaseSummary[] }>(token, `${base}/releases?limit=100`),
+        api<{ items: Submission[] }>(`${base}/submissions?limit=100`),
+        api<{ items: ReleaseSummary[] }>(`${base}/releases?limit=100`),
       ]);
       setSubmissions(submissionData.items);
       setReleases(releaseData.items);
@@ -425,15 +380,15 @@ function ApplicationDetail({ token, appId, navigate }: { token: string; appId: s
       setError("");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "通道加载失败"); }
   };
-  useEffect(() => { void loadTopology(); }, [token, appId]);
-  useEffect(() => { void loadChannel(); setDetail(null); }, [token, appId, federationId]);
+  useEffect(() => { void loadTopology(); }, [appId]);
+  useEffect(() => { void loadChannel(); setDetail(null); }, [appId, federationId]);
 
   const uniqueArtifacts = useMemo(() => Array.from(new Map(submissions.map((item) => [item.artifact_digest, item])).values()), [submissions]);
   async function createFederation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     try {
-      await api(token, `/admin/v1/apps/${encodeURIComponent(appId)}/federations`, { method: "POST", body: JSON.stringify({ federation_id: form.get("federation_id"), display_name: form.get("display_name") }) });
+      await api(`/admin/v1/apps/${encodeURIComponent(appId)}/federations`, { method: "POST", body: JSON.stringify({ federation_id: form.get("federation_id"), display_name: form.get("display_name") }) });
       setFederationModal(false); setNotice("Federation 已创建。"); await loadTopology();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "创建失败"); }
   }
@@ -443,7 +398,7 @@ function ApplicationDetail({ token, appId, navigate }: { token: string; appId: s
     const federation = String(form.get("federation_id"));
     const site = String(form.get("site_id"));
     try {
-      await api(token, `/admin/v1/apps/${encodeURIComponent(appId)}/federations/${encodeURIComponent(federation)}/memberships/${encodeURIComponent(site)}`, { method: "PUT", body: JSON.stringify({ can_submit: form.has("can_submit"), can_receive: form.has("can_receive"), can_execute_task: form.has("can_execute_task") }) });
+      await api(`/admin/v1/apps/${encodeURIComponent(appId)}/federations/${encodeURIComponent(federation)}/memberships/${encodeURIComponent(site)}`, { method: "PUT", body: JSON.stringify({ can_submit: form.has("can_submit"), can_receive: form.has("can_receive"), can_execute_task: form.has("can_execute_task") }) });
       setMembershipModal(false); setNotice(`${site} 的成员权限已保存。`); await loadTopology();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "保存失败"); }
   }
@@ -451,14 +406,14 @@ function ApplicationDetail({ token, appId, navigate }: { token: string; appId: s
     if (!selectedDigests.length || !federationId) return;
     try {
       const base = `/admin/v1/apps/${encodeURIComponent(appId)}/federations/${encodeURIComponent(federationId)}`;
-      await api(token, `${base}/releases`, { method: "POST", body: JSON.stringify({ artifact_digests: selectedDigests }) });
+      await api(`${base}/releases`, { method: "POST", body: JSON.stringify({ artifact_digests: selectedDigests }) });
       setSelectedDigests([]); setNotice("不可变 Release 已创建，等待下发 stage 命令。"); await loadChannel();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "发布创建失败"); }
   }
   async function openRelease(releaseId: string) {
     try {
       const base = `/admin/v1/apps/${encodeURIComponent(appId)}/federations/${encodeURIComponent(federationId)}`;
-      setDetail(await api<ReleaseDetail>(token, `${base}/releases/${releaseId}`));
+      setDetail(await api<ReleaseDetail>(`${base}/releases/${releaseId}`));
     } catch (reason) { setError(reason instanceof Error ? reason.message : "发布加载失败"); }
   }
   async function deliveryAction(action: "stage" | "activate" | "rollback") {
@@ -469,7 +424,7 @@ function ApplicationDetail({ token, appId, navigate }: { token: string; appId: s
     if (action !== "stage" && !window.confirm(`向 ${siteIds.length} 个站点下发 ${action} 命令？`)) return;
     try {
       const base = `/admin/v1/apps/${encodeURIComponent(appId)}/federations/${encodeURIComponent(federationId)}`;
-      await api(token, `${base}/releases/${detail.release_id}/${action}`, { method: "POST", body: JSON.stringify({ site_ids: siteIds }) });
+      await api(`${base}/releases/${detail.release_id}/${action}`, { method: "POST", body: JSON.stringify({ site_ids: siteIds }) });
       setNotice(`${action} 命令已写入 ${siteIds.length} 个站点的下行通道。`);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "命令下发失败"); }
   }
@@ -521,8 +476,6 @@ function Contract({ manifest }: { manifest: Json }) {
 }
 
 export default function App() {
-  const [token, setToken] = useState(() => sessionStorage.getItem(TOKEN_KEY) || "");
   const { path, navigate } = usePath();
-  if (!token) return <Login onLogin={setToken} />;
-  return <Shell token={token} path={path} navigate={navigate} onLogout={() => { sessionStorage.removeItem(TOKEN_KEY); setToken(""); }} />;
+  return <Shell path={path} navigate={navigate} />;
 }

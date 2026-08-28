@@ -24,7 +24,7 @@ fed-api（backend/，FastAPI）
 
 控制台和后端分别位于 `frontend/`、`backend/`，在 Railway 是两个可独立监控、构建和发布的服务。
 前端使用 React + Vite，直接调用稳定的 `/admin/v1` 契约；不增加 Next.js、BFF、GraphQL、组件库或
-WebSocket。管理员 Token 只保存在浏览器 `sessionStorage`，后端用精确 CORS origin 授权控制台域名。
+WebSocket。development 通过 `FEDPLAT_ADMIN_AUTH_DISABLED=true` 免登录；production 必须关闭该开关并恢复管理员认证。
 
 控制台只管理平台，不进入各应用自己的业务页面。
 

@@ -112,6 +112,8 @@ def require_admin(
     settings: Annotated[Settings, Depends(get_settings)],
     authorization: Annotated[str | None, Header()] = None,
 ) -> None:
+    if settings.admin_auth_disabled:
+        return
     token = bearer_token(authorization)
     if not secrets.compare_digest(token, settings.admin_token):
         fail(401, "E_AUTH", "invalid admin credential")

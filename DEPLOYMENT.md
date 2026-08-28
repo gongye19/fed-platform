@@ -85,6 +85,7 @@ Presigned GET/PUT
 ```text
 FEDPLAT_DATABASE_URL=postgresql://...
 FEDPLAT_ADMIN_TOKEN=至少24字符
+FEDPLAT_ADMIN_AUTH_DISABLED=false        # development 当前设为 true，production 必须为 false
 FEDPLAT_CORS_ORIGINS=https://fed-console.example
 
 FEDPLAT_S3_ENDPOINT=https://...
