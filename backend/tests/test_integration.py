@@ -115,6 +115,20 @@ def test_registry_and_artifact_submission(live_stack):
     assert repeated_app.status_code == 200 and repeated_app.json()["created"] is False
     apps = client.get("/admin/v1/apps", headers=admin)
     assert apps.status_code == 200 and apps.json()["items"][0]["app_id"] == app_id
+    agent = client.get(f"/admin/v1/apps/{app_id}/agent", headers=admin)
+    assert agent.status_code == 200 and agent.json()["core_plugin_id"] == "deepseek-harness"
+    configured = client.put(
+        f"/admin/v1/apps/{app_id}/agent",
+        json={"core_plugin_id": "manual-channel", "config": {}, "expected_revision": 1},
+        headers=admin,
+    )
+    assert configured.status_code == 200 and configured.json()["revision"] == 2
+    stale = client.put(
+        f"/admin/v1/apps/{app_id}/agent",
+        json={"core_plugin_id": "manual-channel", "config": {}, "expected_revision": 1},
+        headers=admin,
+    )
+    assert stale.status_code == 409
 
     site = client.post(
         "/admin/v1/sites",
@@ -246,8 +260,27 @@ def test_registry_and_artifact_submission(live_stack):
     assert client.get("/admin/v1/activity", headers=admin).json()["items"]
 
     job = database.claim_agent_job("integration-worker")
-    assert job and job["app_id"] == app_id
-    database.finish_agent_job(job["job_id"], app_id)
+    assert job and job["app_id"] == app_id and job["core_plugin_id"] == "manual-channel"
+    result = {
+        "new_state": {"handled": 1},
+        "intents": [{"kind": "wait", "payload": {}}],
+        "evidence": {},
+        "core_plugin_id": "manual-channel",
+        "core_plugin_version": "1.0.0",
+    }
+    database.finish_agent_job(
+        job["job_id"],
+        app_id,
+        result=result,
+        new_state=result["new_state"],
+        expected_config_revision=job["config_revision"],
+        expected_state_revision=job["state_revision"],
+    )
     with database.connection() as conn:
         assert conn.execute("SELECT count(*) AS n FROM events").fetchone()["n"] == 5
-        assert conn.execute("SELECT status FROM agent_jobs").fetchone()["status"] == "succeeded"
+        stored_job = conn.execute("SELECT status, result FROM agent_jobs").fetchone()
+        assert stored_job == {"status": "succeeded", "result": result}
+        stored_agent = conn.execute(
+            "SELECT state, state_revision FROM app_agents WHERE app_id = %s", (app_id,)
+        ).fetchone()
+        assert stored_agent == {"state": {"handled": 1}, "state_revision": 3}

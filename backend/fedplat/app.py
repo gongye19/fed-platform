@@ -15,8 +15,15 @@ from starlette.requests import Request
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 
+from fedplat.agent_core import (
+    AgentCoreError,
+    core_version,
+    default_agent_binding,
+    validate_core_config,
+)
 from fedplat.artifact_store import ArtifactStoreError, S3ArtifactStore
 from fedplat.protocol import (
+    AgentConfigurationUpdate,
     ArtifactDescriptor,
     CommandAck,
     DeliveryAction,
@@ -32,7 +39,7 @@ from fedplat.settings import Settings, get_settings
 from fedplat.store import ConflictError, Database, ForbiddenError, NotFoundError
 
 
-app = FastAPI(title="FedAgent Platform", version="0.3.0")
+app = FastAPI(title="FedAgent Platform", version="0.4.0")
 cors_origins = [
     origin.strip()
     for origin in os.environ.get("FEDPLAT_CORS_ORIGINS", "").split(",")
@@ -174,7 +181,7 @@ def register_application(
 
     manifest = body.model_dump(by_alias=True, mode="json")
     try:
-        created = db.register_application(manifest, json_digest(manifest))
+        created = db.register_application(manifest, json_digest(manifest), default_agent_binding())
     except (ConflictError, NotFoundError, ForbiddenError) as exc:
         map_store_error(exc)
     response.status_code = 201 if created else 200
@@ -189,6 +196,38 @@ def list_applications(
 ) -> dict[str, Any]:
     items = db.list_applications(after=after, limit=limit)
     return {"items": items, "next": items[-1]["app_id"] if len(items) == limit else None}
+
+
+@app.get("/admin/v1/apps/{app_id}/agent", dependencies=[Depends(require_admin)])
+def get_agent_configuration(
+    app_id: StableId,
+    db: Annotated[Database, Depends(get_database)],
+) -> dict[str, Any]:
+    try:
+        return db.get_agent_configuration(app_id)
+    except (ConflictError, NotFoundError, ForbiddenError) as exc:
+        map_store_error(exc)
+
+
+@app.put("/admin/v1/apps/{app_id}/agent", dependencies=[Depends(require_admin)])
+def update_agent_configuration(
+    app_id: StableId,
+    body: AgentConfigurationUpdate,
+    db: Annotated[Database, Depends(get_database)],
+) -> dict[str, Any]:
+    try:
+        config = validate_core_config(body.core_plugin_id, body.config)
+        return db.update_agent_configuration(
+            app_id,
+            body.core_plugin_id,
+            core_version(body.core_plugin_id),
+            config,
+            body.expected_revision,
+        )
+    except AgentCoreError as exc:
+        fail(400, "E_BAD_AGENT_CONFIG", str(exc))
+    except (ConflictError, NotFoundError, ForbiddenError) as exc:
+        map_store_error(exc)
 
 
 @app.get("/admin/v1/apps/{app_id}/topology", dependencies=[Depends(require_admin)])

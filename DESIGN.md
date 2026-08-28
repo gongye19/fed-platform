@@ -121,7 +121,7 @@ POST /admin/v1/apps
     验证 Manifest
     创建 Application namespace
     创建 AppFederationAgent
-    绑定内置 manual-channel Agent Core
+    绑定受限 DeepSeek Harness Agent Core
 
 POST /admin/v1/apps/{app_id}/federations
     创建 federation_id
@@ -141,7 +141,7 @@ PUT /admin/v1/apps/{app_id}/federations/{federation_id}/plugins
     绑定 Artifact Handler / Federation Algorithm
 ```
 
-没有联邦算法插件时，Application 仍可注册和接收 Submission。默认 Agent 只会存储、展示、由管理员创建 Release 并分发；这就是 v1 的最小可用通道。
+没有联邦算法插件时，Application 仍可注册和接收 Submission。Agent Core 的结构化意图会被保存；管理员仍可创建 Release 并分发，这是当前最小可用通道。
 
 ---
 
@@ -324,6 +324,8 @@ Agent 不直接订阅消息中间件。API 成功写入 Event/Submission 后，�
 
 这样 1,000 个应用是 1,000 份逻辑 Agent 状态，不是 1,000 个常驻进程。
 
+新应用默认使用 `deepseek-harness`。Worker 通过官方 Python SDK 启动一次性 Harness subprocess，使用完整的无工具 Cordis 组合：不挂载 shell、文件系统、skill、job 或站点凭据。Harness 只输出 `{new_state, intents, evidence}`；平台用 Pydantic 校验大小和类型后保存结果与新状态。平台数据库是 memory 的唯一持久层，`config_revision/state_revision` 防止并发覆盖。现有应用保留 `manual-channel`，管理员可通过版本化配置 API 切换。
+
 ### 7.2 Agent 可以返回的固定意图
 
 ```text
@@ -400,7 +402,7 @@ config_schema_digest: sha256:...
 runtime: builtin  # v1; container 有第一个外部插件时再开
 ```
 
-v1 只实现内置 `manual-channel` Agent Core、`json-schema` 和 `opaque-blob` Artifact Handler。插件协议先冻结，不先做插件市场、动态下载或容器编排。
+v1 实现 `deepseek-harness` Agent Core 与 `manual-channel` 回退；Harness 组合固定为无工具安全边界，provider、model、超时、token 上限、应用指令与平台 memory 上限可配置。插件协议先冻结，不先做插件市场、动态下载或容器编排。
 
 当第一个真实外部算法出现时，用独立、签名、按 image digest 锁定的容器运行，通过版本化 HTTP/JSON Worker API 通信。大工件只传 Descriptor；插件不拿数据库和站点凭据。
 
@@ -495,7 +497,7 @@ audit_log
 2. 实现 Application/Site/Federation/Membership 注册与隔离。
 3. 实现 Federation Node outbox/inbox、上下行、断网重试和 Artifact 校验。
 4. 实现 Artifact 存储、Submission、Task、Release、Delivery 通道。
-5. 注册应用时自动创建 AppFederationAgent，使用内置 `manual-channel` Core。
+5. 注册应用时自动创建 AppFederationAgent，默认使用受限 `deepseek-harness` Core。
 6. 冻结三个插件 manifest/调用契约，只实现内置 JSON/opaque handler。
 7. 提供 conformance test runner 和一个从零按协议开发的参考应用。
 8. 提供 Federation Console，查看 Application/Federation/Site、通道状态并完成手工发布。
@@ -503,7 +505,7 @@ audit_log
 ### 不做
 
 - 不实现 memory/skill/FedAvg 等真实联邦算法。
-- 不实现 LLM Agent Core；首版 Agent 是确定性 manual-channel workflow。
+- 不自动执行尚未实现的联邦算法意图；当前只校验并保存 Agent 决策。
 - 不实现外部插件动态安装、市场和容器编排。
 - 不为未遵循 FedApp 契约的历史应用做兼容层。
 - 不管应用镜像升级和站点 K8s/VM 运维。
@@ -527,6 +529,6 @@ audit_log
 
 旧 FastAPI/SQLite spike 已被正式 PostgreSQL/S3 基础替换。当前实现覆盖 Application、Agent、Site、
 Federation、Membership、ArtifactType、Artifact、Submission、Event、AgentJob、Release、Delivery、
-Command/Ack、manual-channel Worker 与独立 Federation Console。
+Command/Ack、受限 DeepSeek Harness/manual-channel Worker、版本化 Agent 配置与状态，以及独立 Federation Console。
 
 下一阶段选择第一个真实应用，冻结 Federation Node 契约；不恢复旧 `Update/Digest/Plugin` 接口。

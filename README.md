@@ -22,10 +22,12 @@
 - Submission、Event、AgentJob 同事务写入及幂等；
 - 不可变 Release、站点 Delivery、stage/activate/rollback Command 与 Ack；
 - PostgreSQL `SKIP LOCKED` Agent Worker；
+- 新应用默认绑定 DeepSeek Harness Agent Core，配置与平台 memory 均带 revision；
+- Harness 使用无 shell、无文件系统、无 skill/job 工具的 Cordis 组合，只能返回受校验意图；
 - Application、拓扑、工件、发布、站点和活动管理 API；
 - 可独立部署的 React 管理控制台，包含平台架构概览、应用、站点和活动视图。
 
-旧 SQLite `Update / Digest / Plugin` spike 已删除，不提供兼容接口。具体 Agent Core、联邦算法与 Artifact Handler 插件仍只保留协议位置，等第一个真实应用确定语义后再实现。
+旧 SQLite `Update / Digest / Plugin` spike 已删除，不提供兼容接口。DeepSeek Harness Agent Core 与 `manual-channel` 回退已实现；联邦算法与 Artifact Handler 插件仍只保留协议位置，等第一个真实应用确定语义后再实现。
 
 ## 仓库结构
 
@@ -66,6 +68,8 @@ GET  /ready
 
 POST /admin/v1/apps
 GET  /admin/v1/apps
+GET  /admin/v1/apps/{app_id}/agent
+PUT  /admin/v1/apps/{app_id}/agent
 GET  /admin/v1/apps/{app_id}/topology
 POST /admin/v1/sites
 GET  /admin/v1/sites

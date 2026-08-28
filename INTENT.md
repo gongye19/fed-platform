@@ -18,7 +18,7 @@
 1. 应用、站点、Federation 和 Membership 注册与隔离。
 2. 站点产生按 schema 声明的 Artifact，断网可重试地上传 Submission。
 3. 平台按 digest 存工件，按 app/federation 存元数据。
-4. AppFederationAgent 接收事件，v1 默认只做确定性 manual-channel workflow。
+4. AppFederationAgent 接收事件；新应用默认由受限 DeepSeek Harness Core 生成结构化意图，`manual-channel` 可作为回退。
 5. 管理员或未来插件创建 Release，分发到成员站点。
 6. 应用 stage、activate、ack，失败时 rollback。
 7. 提供 conformance test，使新应用按同一契约开发。

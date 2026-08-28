@@ -1,10 +1,11 @@
 [project]
 name = "fedplat"
-version = "0.3.0"
+version = "0.4.0"
 description = "FedAgent platform kernel: protocol, registry, plugin socket"
 requires-python = ">=3.12"
 dependencies = [
     "boto3==1.43.82",
+    "deepseek-harness-sdk==0.1.1rc1",
     "fastapi==0.141.1",
     "jsonschema==4.26.0",
     "pydantic==2.13.4",
@@ -28,7 +29,7 @@ fed-worker = "fedplat.worker:main"
 include = ["fedplat*"]
 
 [tool.setuptools.package-data]
-fedplat = ["migrations/*.sql"]
+fedplat = ["dsh/*.yml", "migrations/*.sql"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

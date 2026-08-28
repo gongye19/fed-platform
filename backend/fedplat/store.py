@@ -35,7 +35,12 @@ class Database:
         with self.connection() as conn:
             conn.execute("SELECT 1").fetchone()
 
-    def register_application(self, manifest: dict[str, Any], manifest_digest: str) -> bool:
+    def register_application(
+        self,
+        manifest: dict[str, Any],
+        manifest_digest: str,
+        agent_binding: dict[str, Any],
+    ) -> bool:
         app_id = manifest["app_id"]
         app_version = manifest["app_version"]
         with self.connection() as conn:
@@ -71,10 +76,16 @@ class Database:
                 ),
             )
             conn.execute(
-                """INSERT INTO app_agents (app_id, core_plugin_id)
-                   VALUES (%s, 'manual-channel')
+                """INSERT INTO app_agents
+                   (app_id, core_plugin_id, core_plugin_version, config)
+                   VALUES (%s, %s, %s, %s)
                    ON CONFLICT (app_id) DO NOTHING""",
-                (app_id,),
+                (
+                    app_id,
+                    agent_binding["core_plugin_id"],
+                    agent_binding["core_plugin_version"],
+                    Jsonb(agent_binding["config"]),
+                ),
             )
 
             for item in manifest["artifact_types"]:
@@ -147,7 +158,7 @@ class Database:
         with self.connection() as conn:
             return conn.execute(
                 """SELECT a.app_id, a.display_name, a.current_version, a.status,
-                          aa.status AS agent_status, aa.core_plugin_id,
+                          aa.status AS agent_status, aa.core_plugin_id, aa.core_plugin_version,
                           count(DISTINCT f.federation_id) AS federation_count,
                           count(DISTINCT m.site_id) AS site_count
                    FROM applications a
@@ -157,11 +168,83 @@ class Database:
                      ON m.app_id = f.app_id AND m.federation_id = f.federation_id
                     AND m.ended_at IS NULL
                    WHERE (%s::text IS NULL OR a.app_id > %s)
-                   GROUP BY a.app_id, aa.status, aa.core_plugin_id
+                   GROUP BY a.app_id, aa.status, aa.core_plugin_id, aa.core_plugin_version
                    ORDER BY a.app_id
                    LIMIT %s""",
                 (after, after, limit),
             ).fetchall()
+
+    def get_agent_configuration(self, app_id: str) -> dict[str, Any]:
+        with self.connection() as conn:
+            row = conn.execute(
+                """SELECT app_id, core_plugin_id, core_plugin_version, status, config,
+                          revision, state_revision, updated_at
+                   FROM app_agents WHERE app_id = %s""",
+                (app_id,),
+            ).fetchone()
+            if not row:
+                raise NotFoundError("application agent not found")
+            return row
+
+    def update_agent_configuration(
+        self,
+        app_id: str,
+        core_plugin_id: str,
+        core_plugin_version: str,
+        config: dict[str, Any],
+        expected_revision: int,
+    ) -> dict[str, Any]:
+        with self.connection() as conn:
+            current = conn.execute(
+                """SELECT core_plugin_id, core_plugin_version
+                   FROM app_agents WHERE app_id = %s FOR UPDATE""",
+                (app_id,),
+            ).fetchone()
+            if not current:
+                raise NotFoundError("application agent not found")
+            reset_state = (
+                current["core_plugin_id"] != core_plugin_id
+                or current["core_plugin_version"] != core_plugin_version
+            )
+            row = conn.execute(
+                """UPDATE app_agents
+                   SET core_plugin_id = %s, core_plugin_version = %s, config = %s,
+                       revision = revision + 1,
+                       state = CASE WHEN %s THEN '{}'::jsonb ELSE state END,
+                       state_revision = state_revision + CASE WHEN %s THEN 1 ELSE 0 END,
+                       status = 'idle', updated_at = now()
+                   WHERE app_id = %s AND revision = %s
+                   RETURNING app_id, core_plugin_id, core_plugin_version, status, config,
+                             revision, state_revision, updated_at""",
+                (
+                    core_plugin_id,
+                    core_plugin_version,
+                    Jsonb(config),
+                    reset_state,
+                    reset_state,
+                    app_id,
+                    expected_revision,
+                ),
+            ).fetchone()
+            if not row:
+                raise ConflictError("agent configuration revision changed")
+            conn.execute(
+                """INSERT INTO audit_log
+                   (actor_type, actor_id, action, app_id, target_type, target_id, detail)
+                   VALUES ('admin', 'admin', 'agent.configured', %s, 'agent', %s, %s)""",
+                (
+                    app_id,
+                    app_id,
+                    Jsonb(
+                        {
+                            "core_plugin_id": core_plugin_id,
+                            "core_plugin_version": core_plugin_version,
+                            "revision": row["revision"],
+                        }
+                    ),
+                ),
+            )
+            return row
 
     def register_site(self, site_id: str, display_name: str, token_prefix: str, key_hash: str) -> None:
         with self.connection() as conn:
@@ -406,7 +489,9 @@ class Database:
         with self.connection() as conn:
             application = conn.execute(
                 """SELECT a.app_id, a.display_name, a.current_version, a.status,
-                          aa.status AS agent_status, aa.core_plugin_id, av.manifest
+                          aa.status AS agent_status, aa.core_plugin_id,
+                          aa.core_plugin_version, aa.revision AS agent_config_revision,
+                          aa.state_revision AS agent_state_revision, av.manifest
                    FROM applications a JOIN app_agents aa USING (app_id)
                    JOIN application_versions av
                      ON av.app_id = a.app_id AND av.app_version = a.current_version
@@ -795,17 +880,28 @@ class Database:
         with self.connection() as conn:
             job = conn.execute(
                 """WITH picked AS (
-                     SELECT job_id FROM agent_jobs
-                     WHERE status IN ('pending', 'retry') AND available_at <= now()
-                       AND (leased_until IS NULL OR leased_until < now())
-                     ORDER BY available_at, created_at
-                     FOR UPDATE SKIP LOCKED LIMIT 1
+                     SELECT j.job_id FROM agent_jobs j
+                     JOIN app_agents aa ON aa.app_id = j.app_id
+                     WHERE j.status IN ('pending', 'retry') AND j.available_at <= now()
+                       AND (j.leased_until IS NULL OR j.leased_until < now())
+                       AND NOT EXISTS (
+                         SELECT 1 FROM agent_jobs active
+                         WHERE active.app_id = j.app_id AND active.status = 'running'
+                           AND active.leased_until > now()
+                       )
+                     ORDER BY j.available_at, j.created_at
+                     FOR UPDATE OF j, aa SKIP LOCKED LIMIT 1
+                   ), claimed AS (
+                     UPDATE agent_jobs j
+                     SET status = 'running', attempts = attempts + 1, leased_by = %s,
+                         leased_until = now() + interval '15 minutes', updated_at = now()
+                     FROM picked WHERE j.job_id = picked.job_id
+                     RETURNING j.*
                    )
-                   UPDATE agent_jobs j
-                   SET status = 'running', attempts = attempts + 1, leased_by = %s,
-                       leased_until = now() + interval '60 seconds', updated_at = now()
-                   FROM picked WHERE j.job_id = picked.job_id
-                   RETURNING j.*""",
+                   SELECT claimed.*, aa.core_plugin_id, aa.core_plugin_version,
+                          aa.config, aa.revision AS config_revision,
+                          aa.state, aa.state_revision
+                   FROM claimed JOIN app_agents aa USING (app_id)""",
                 (worker_id,),
             ).fetchone()
             if job:
@@ -815,23 +911,74 @@ class Database:
                 )
             return job
 
-    def finish_agent_job(self, job_id: uuid.UUID, app_id: str, error: str | None = None) -> None:
+    def finish_agent_job(
+        self,
+        job_id: uuid.UUID,
+        app_id: str,
+        error: str | None = None,
+        *,
+        result: dict[str, Any] | None = None,
+        new_state: dict[str, Any] | None = None,
+        expected_config_revision: int | None = None,
+        expected_state_revision: int | None = None,
+    ) -> None:
         with self.connection() as conn:
             if error:
-                conn.execute(
-                    """UPDATE agent_jobs SET status = 'failed', last_error = %s,
-                              leased_by = NULL, leased_until = NULL, updated_at = now()
-                       WHERE job_id = %s""",
+                failed = conn.execute(
+                    """UPDATE agent_jobs
+                       SET status = CASE WHEN attempts < 3 THEN 'retry' ELSE 'failed' END,
+                           available_at = CASE WHEN attempts < 3
+                             THEN now() + interval '15 seconds' ELSE available_at END,
+                           last_error = %s, leased_by = NULL, leased_until = NULL,
+                           updated_at = now()
+                       WHERE job_id = %s RETURNING status""",
                     (error, job_id),
-                )
-                agent_status = "failed"
+                ).fetchone()
+                agent_status = "failed" if failed and failed["status"] == "failed" else "idle"
             else:
                 conn.execute(
-                    """UPDATE agent_jobs SET status = 'succeeded', leased_by = NULL,
-                              leased_until = NULL, updated_at = now()
+                    """UPDATE agent_jobs SET status = 'succeeded', result = %s,
+                              leased_by = NULL, leased_until = NULL, last_error = NULL,
+                              updated_at = now()
                        WHERE job_id = %s""",
-                    (job_id,),
+                    (Jsonb(result) if result is not None else None, job_id),
                 )
+                if new_state is not None:
+                    updated = conn.execute(
+                        """UPDATE app_agents
+                           SET state = %s, state_revision = state_revision + 1, updated_at = now()
+                           WHERE app_id = %s
+                             AND (%s::bigint IS NULL OR revision = %s)
+                             AND (%s::bigint IS NULL OR state_revision = %s)
+                           RETURNING state_revision""",
+                        (
+                            Jsonb(new_state),
+                            app_id,
+                            expected_config_revision,
+                            expected_config_revision,
+                            expected_state_revision,
+                            expected_state_revision,
+                        ),
+                    ).fetchone()
+                    if not updated:
+                        raise ConflictError("agent configuration or state revision changed")
+                if result is not None:
+                    conn.execute(
+                        """INSERT INTO audit_log
+                           (actor_type, actor_id, action, app_id, target_type, target_id, detail)
+                           VALUES ('agent', %s, 'agent.job.completed', %s, 'agent_job', %s, %s)""",
+                        (
+                            app_id,
+                            app_id,
+                            str(job_id),
+                            Jsonb(
+                                {
+                                    "intents": [item["kind"] for item in result.get("intents", [])],
+                                    "core_plugin_id": result.get("core_plugin_id"),
+                                }
+                            ),
+                        ),
+                    )
                 agent_status = "idle"
             conn.execute(
                 "UPDATE app_agents SET status = %s, updated_at = now() WHERE app_id = %s",

@@ -44,7 +44,11 @@ export default defineRailway((ctx) => {
     preDeploy: "fed-migrate",
     deploy: { restartPolicyMaxRetries: 3 },
     replicas: { "asia-southeast1-eqsg3a": 1 },
-    env: { FEDPLAT_DATABASE_URL: postgresDb.env.DATABASE_URL },
+    env: {
+      DEEPSEEK_API_KEY: preserve(),
+      DEEPSEEK_BASE_URL: preserve(),
+      FEDPLAT_DATABASE_URL: postgresDb.env.DATABASE_URL,
+    },
   });
 
   const fedConsole = service("fed-console", {

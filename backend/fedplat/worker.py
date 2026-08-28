@@ -4,6 +4,7 @@ import os
 import socket
 import time
 
+from fedplat.agent_core import run_agent_core
 from fedplat.store import Database
 
 
@@ -19,8 +20,20 @@ def main() -> None:
             time.sleep(1)
             continue
         try:
-            # manual-channel persists submissions; a configured plugin can replace this decision later.
-            db.finish_agent_job(job["job_id"], job["app_id"])
+            decision = run_agent_core(job)
+            result = {
+                **decision.model_dump(mode="json"),
+                "core_plugin_id": job["core_plugin_id"],
+                "core_plugin_version": job["core_plugin_version"],
+            }
+            db.finish_agent_job(
+                job["job_id"],
+                job["app_id"],
+                result=result,
+                new_state=decision.new_state,
+                expected_config_revision=job["config_revision"],
+                expected_state_revision=job["state_revision"],
+            )
         except Exception as exc:
             db.finish_agent_job(job["job_id"], job["app_id"], str(exc))
 

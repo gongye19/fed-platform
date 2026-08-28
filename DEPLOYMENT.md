@@ -95,6 +95,9 @@ FEDPLAT_S3_ACCESS_KEY_ID=...
 FEDPLAT_S3_SECRET_ACCESS_KEY=...
 FEDPLAT_S3_URL_STYLE=virtual        # 或 path
 
+DEEPSEEK_API_KEY=...               # 只注入 fed-worker
+DEEPSEEK_BASE_URL=...              # 可选，自建兼容端点时使用
+
 VITE_API_URL=https://fed-api.example
 ```
 
@@ -104,7 +107,7 @@ Northflank 还是自有服务器。
 `FEDPLAT_S3_URL_STYLE` 必须保留：Railway 新 Bucket 使用 virtual-hosted style，而部分自建 S3 服务使用
 path style。其余差异由 S3 client 处理。
 
-本地密钥放在不提交 Git 的 `.env.local`；Railway production 使用平台 secrets。生产数据库保持私网，
+本地密钥放在不提交 Git 的 `.env.local`；Railway production 使用平台 secrets。DeepSeek key 不写数据库、不经过管理 API，也不注入 Console/API。生产数据库保持私网，
 只有 development 数据库为了本地开发开放 TLS 公网连接。
 
 ---
@@ -181,7 +184,8 @@ PostgreSQL 服务的数据盘，不适合我们的 Artifact 通道：
 ```text
 migrations/
 ├─ 0001_registry_channel.sql
-└─ 0002_release_delivery.sql
+├─ 0002_release_delivery.sql
+└─ 0003_agent_runtime.sql
 ```
 
 数据库维护 `schema_migrations(version, applied_at, checksum)`。同一 migration 内容发布后不可修改，

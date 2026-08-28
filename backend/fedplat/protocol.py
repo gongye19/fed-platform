@@ -100,6 +100,14 @@ class MembershipSpec(BaseModel):
     can_execute_task: bool = False
 
 
+class AgentConfigurationUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    core_plugin_id: StableId
+    config: dict[str, Any] = Field(default_factory=dict)
+    expected_revision: int = Field(ge=1)
+
+
 class ArtifactDescriptor(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
