@@ -14,13 +14,17 @@ import {
 } from "@xyflow/react";
 
 const moduleDetails = {
+  platform: {
+    title: "联邦平台",
+    summary: "联邦平台提供所有应用共同遵守的协议，并负责注册和管理这些应用。每个应用都在这套协议上连接自己的站点。",
+  },
   application: {
     title: "应用",
-    summary: "平台可以同时运行多个应用。每个应用各自管理站点和联邦过程，彼此不会混在一起。",
+    summary: "应用按照联邦平台的协议开发并注册到平台。每个应用各自管理联邦域和站点，彼此不会混在一起。",
   },
   agent: {
     title: "应用联邦 Agent",
-    summary: "每个应用都有一个专属 Agent。它收集这个应用各站点提交的内容，完成联邦处理，再把结果发回需要的站点。",
+    summary: "应用的联邦 Agent 运行在所属联邦域内部。它收集域内各站点提交的内容，完成联邦处理，再把结果发回需要的站点。",
   },
   federation: {
     title: "联邦域",
@@ -63,9 +67,11 @@ function PlatformDiagramNode({ data, selected }: NodeProps<PlatformNode>) {
   return (
     <div className={`flow-node${selected ? " selected" : ""}`}>
       <Handle id="top" type="target" position={Position.Top} />
+      <Handle id="top-out" type="source" position={Position.Top} style={{ left: "62%" }} />
       <Handle id="left" type="target" position={Position.Left} />
       <span className="flow-node__copy"><strong>{data.title}</strong><small>{data.subtitle}</small></span>
       <Handle id="bottom" type="source" position={Position.Bottom} />
+      <Handle id="bottom-in" type="target" position={Position.Bottom} style={{ left: "62%" }} />
       <Handle id="right" type="source" position={Position.Right} />
     </div>
   );
@@ -98,6 +104,21 @@ function verticalEdge(id: string, source: string, target: string, label?: string
   };
 }
 
+function reverseVerticalEdge(id: string, source: string, target: string, label?: string): Edge {
+  return {
+    id,
+    source,
+    target,
+    sourceHandle: "top-out",
+    targetHandle: "bottom-in",
+    type: "smoothstep",
+    label,
+    animated: true,
+    markerEnd: activeMarker,
+    style: { stroke: "#7c86ea", strokeWidth: 1.35 },
+  };
+}
+
 function horizontalEdge(id: string, source: string, target: string, label?: string, dashed = false): Edge {
   return {
     id,
@@ -114,40 +135,43 @@ function horizontalEdge(id: string, source: string, target: string, label?: stri
 }
 
 const hierarchyNodes: DiagramNode[] = [
-  { id: "layer-app", type: "layer", position: { x: 0, y: 0 }, data: { title: "01  应用层", subtitle: "平台上注册多个独立应用", tone: "plain" }, style: { width: 1200, height: 132 }, selectable: false, focusable: false, draggable: false },
-  { id: "layer-agent", type: "layer", position: { x: 0, y: 152 }, data: { title: "02  应用联邦 Agent 层", subtitle: "每个应用都有一个专属 Agent", tone: "platform" }, style: { width: 1200, height: 142 }, selectable: false, focusable: false, draggable: false },
-  { id: "layer-federation", type: "layer", position: { x: 0, y: 314 }, data: { title: "03  联邦域层", subtitle: "Agent 管理本应用的一个或多个联邦域", tone: "platform" }, style: { width: 1200, height: 142 }, selectable: false, focusable: false, draggable: false },
-  { id: "layer-sites", type: "layer", position: { x: 0, y: 476 }, data: { title: "04  站点层", subtitle: "不同站点通过成员关系加入所属应用", tone: "sites" }, style: { width: 1200, height: 202 }, selectable: false, focusable: false, draggable: false },
+  { id: "layer-platform", type: "layer", position: { x: 0, y: 0 }, data: { title: "00  联邦平台", subtitle: "统一协议与应用注册入口", tone: "platform" }, style: { width: 1200, height: 132 }, selectable: false, focusable: false, draggable: false },
+  { id: "layer-app", type: "layer", position: { x: 0, y: 152 }, data: { title: "01  应用层", subtitle: "所有应用都按照平台协议开发", tone: "plain" }, style: { width: 1200, height: 142 }, selectable: false, focusable: false, draggable: false },
+  { id: "layer-federation", type: "layer", position: { x: 0, y: 314 }, data: { title: "02  联邦域层", subtitle: "联邦 Agent 运行在所属联邦域内部", tone: "platform" }, style: { width: 1200, height: 230 }, selectable: false, focusable: false, draggable: false },
+  { id: "layer-sites", type: "layer", position: { x: 0, y: 564 }, data: { title: "03  站点层", subtitle: "站点提交内容，并接收联邦处理结果", tone: "sites" }, style: { width: 1200, height: 202 }, selectable: false, focusable: false, draggable: false },
+
+  { id: "platform", type: "platform", parentId: "layer-platform", extent: "parent", position: { x: 360, y: 46 }, data: { title: "联邦平台", subtitle: "统一协议 · 注册并管理多个应用", moduleId: "platform" }, style: { width: 480, height: 72 }, ariaLabel: "联邦平台" },
 
   ...(["A", "B", "N"] as const).map((suffix, index): PlatformNode => ({
     id: `app-${suffix}`,
     type: "platform",
     parentId: "layer-app",
     extent: "parent",
-    position: { x: 115 + index * 360, y: 46 },
-    data: { title: `应用 ${suffix}`, subtitle: "定义站点如何协作", moduleId: "application" },
+    position: { x: 115 + index * 360, y: 50 },
+    data: { title: `应用 ${suffix}`, subtitle: "按照平台协议开发并注册", moduleId: "application" },
     style: { width: 250, height: 72 },
     ariaLabel: `应用 ${suffix}`,
   })),
   ...(["A", "B", "N"] as const).map((suffix, index): PlatformNode => ({
-    id: `agent-${suffix}`,
-    type: "platform",
-    parentId: "layer-agent",
-    extent: "parent",
-    position: { x: 115 + index * 360, y: 50 },
-    data: { title: `应用联邦 Agent ${suffix}`, subtitle: `仅服务应用 ${suffix}`, moduleId: "agent" },
-    style: { width: 250, height: 72 },
-    ariaLabel: `应用 ${suffix} 的联邦 Agent`,
-  })),
-  ...(["A", "B", "N"] as const).map((suffix, index): PlatformNode => ({
     id: `federation-${suffix}`,
     type: "platform",
+    className: "federation-container",
     parentId: "layer-federation",
     extent: "parent",
-    position: { x: 115 + index * 360, y: 50 },
-    data: { title: `联邦域 ${suffix}`, subtitle: `组织应用 ${suffix} 的协作站点`, moduleId: "federation" },
-    style: { width: 250, height: 72 },
+    position: { x: 72 + index * 360, y: 32 },
+    data: { title: `联邦域 ${suffix}`, subtitle: `组织应用 ${suffix} 的站点协作`, moduleId: "federation" },
+    style: { width: 336, height: 182 },
     ariaLabel: `应用 ${suffix} 的联邦域`,
+  })),
+  ...(["A", "B", "N"] as const).map((suffix): PlatformNode => ({
+    id: `agent-${suffix}`,
+    type: "platform",
+    parentId: `federation-${suffix}`,
+    extent: "parent",
+    position: { x: 28, y: 88 },
+    data: { title: `应用联邦 Agent ${suffix}`, subtitle: "负责本联邦域的处理", moduleId: "agent" },
+    style: { width: 280, height: 68 },
+    ariaLabel: `联邦域 ${suffix} 内的 Agent`,
   })),
   ...(["A", "B", "N"] as const).flatMap((app, appIndex) =>
     [1, 2, 3].map((site, siteIndex): PlatformNode => ({
@@ -164,9 +188,12 @@ const hierarchyNodes: DiagramNode[] = [
 ];
 
 const hierarchyEdges: Edge[] = (["A", "B", "N"] as const).flatMap((suffix) => [
-  verticalEdge(`app-agent-${suffix}`, `app-${suffix}`, `agent-${suffix}`, "一对一创建"),
-  verticalEdge(`agent-federation-${suffix}`, `agent-${suffix}`, `federation-${suffix}`, "管理"),
-  ...[1, 2, 3].map((site) => verticalEdge(`federation-site-${suffix}-${site}`, `federation-${suffix}`, `site-${suffix}-${site}`, site === 2 ? "一对多" : undefined)),
+  verticalEdge(`platform-app-${suffix}`, "platform", `app-${suffix}`, suffix === "B" ? "注册应用" : undefined),
+  verticalEdge(`app-federation-${suffix}`, `app-${suffix}`, `federation-${suffix}`, suffix === "B" ? "配置联邦域" : undefined),
+  ...[1, 2, 3].flatMap((site) => [
+    verticalEdge(`federation-site-${suffix}-${site}`, `federation-${suffix}`, `site-${suffix}-${site}`, site === 2 ? "结果下发" : undefined),
+    reverseVerticalEdge(`site-federation-${suffix}-${site}`, `site-${suffix}-${site}`, `federation-${suffix}`, site === 2 ? "内容上传" : undefined),
+  ]),
 ]);
 
 const flowNodes: DiagramNode[] = [
@@ -270,7 +297,7 @@ export default function PlatformOverview() {
   return (
     <div className="landing">
       <header className="landing__header">
-        <div><p className="eyebrow">平台概览</p><h1 id="platform-title">联邦平台架构</h1><p>应用彼此隔离；每个应用拥有独立联邦 Agent，只汇总该应用各站点的内容。</p></div>
+        <div><p className="eyebrow">平台概览</p><h1 id="platform-title">联邦平台架构</h1><p>平台提供统一协议并注册多个应用；应用的联邦 Agent 运行在所属联邦域内。</p></div>
       </header>
 
       <section className="architecture-workbench" id="platform-architecture" aria-labelledby="hierarchy-title">
