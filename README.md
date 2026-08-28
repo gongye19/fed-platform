@@ -12,21 +12,49 @@
 
 ## 代码状态
 
-当前 Python 代码是一个连通性 spike，已验证：
+正式 v1 的第一个纵向切片已经实现：
 
-- 应用/站点注册
-- Bearer key 认证
-- 上行幂等
-- 按应用与类型分仓
+- FedApp Manifest、Application、AppFederationAgent 注册；
+- Site、Federation、Membership 和 Bearer credential；
+- PostgreSQL 编号 migration 与复合隔离约束；
+- Railway/S3-compatible Artifact 存储；
+- Artifact digest、大小、media type 和 metadata schema 校验；
+- Submission、Event、AgentJob 同事务写入及幂等；
+- Application 列表、拓扑和 Submission 查询 API。
 
-其 `Update / Digest / Plugin` 接口不是已冻结的 v1 协议。新契约完成技术评审后再替换实现，不在 spike 上继续叠加兼容层。
+旧 SQLite `Update / Digest / Plugin` spike 已删除，不提供兼容接口。Release/Delivery、Worker、插件运行和管理前端尚未实现。
 
-## 运行 spike
+## 本地运行
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
-FEDPLAT_DB=fedplat.db uvicorn fedplat.app:app --reload
+
+set -a
+source .env.local
+set +a
+
+fed-migrate
+uvicorn fedplat.app:app --reload
 pytest
+```
+
+配置模板见 [.env.example](./.env.example)。正式中心数据库只支持 PostgreSQL，Artifact 内容只使用 S3-compatible storage。
+
+## 当前 API
+
+```text
+GET  /health
+GET  /ready
+
+POST /admin/v1/apps
+GET  /admin/v1/apps
+GET  /admin/v1/apps/{app_id}/topology
+POST /admin/v1/sites
+POST /admin/v1/apps/{app_id}/federations
+PUT  /admin/v1/apps/{app_id}/federations/{federation_id}/memberships/{site_id}
+GET  /admin/v1/apps/{app_id}/federations/{federation_id}/submissions
+
+POST /site/v1/apps/{app_id}/federations/{federation_id}/artifacts
 ```

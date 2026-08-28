@@ -476,7 +476,7 @@ audit_log
 | Control API | Python 3.12+ / FastAPI / Pydantic v2 |
 | 管理前端 | FastAPI 服务端渲染 / Jinja2 / 原生 CSS 与少量 JavaScript |
 | Worker & Agent | Python 3.12+ |
-| 元数据 | PostgreSQL；单机开发可 SQLite |
+| 元数据 | PostgreSQL；本地开发连接隔离的 Railway development 数据库 |
 | 工件 | 本地文件开发；大工件出现时 S3/MinIO |
 | Federation Node | Python daemon + SQLite + 私有 HTTP API |
 | 协议源 | OpenAPI + JSON Schema 2020-12 |
@@ -523,8 +523,9 @@ audit_log
 
 ---
 
-## 14. 现有 spike
+## 14. 当前实现
 
-当前 FastAPI/SQLite 代码仅证明了基本注册、Bearer 认证、幂等和分仓。它不是新协议的兼容基线。
+旧 FastAPI/SQLite spike 已被正式 PostgreSQL/S3 基础替换。当前实现覆盖 Application、Agent、Site、
+Federation、Membership、ArtifactType、Artifact、Submission、Event、AgentJob 与 Audit 的第一个纵向切片。
 
-下一步不在 `Update/Digest/Plugin` 上继续加字段；评审通过后，按本文的内核实体和契约重写最小通道。
+下一阶段实现 Release/Delivery 状态机和 Worker；不恢复旧 `Update/Digest/Plugin` 接口。

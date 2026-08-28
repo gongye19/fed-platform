@@ -1,175 +1,327 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import secrets
-import uuid
-from datetime import datetime, timezone
+from functools import lru_cache
+from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
-from pydantic import BaseModel, ValidationError
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Response, UploadFile
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError, ValidationError as JsonSchemaValidationError
+from pydantic import ValidationError
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
-from fedplat.plugin import get_plugin
-from fedplat.protocol import Digest, Envelope
-from fedplat.store import Store
-
-DB_PATH = os.environ.get("FEDPLAT_DB", "fedplat.db")
-_store: Store | None = None
-
-
-def get_store() -> Store:
-    global _store
-    if _store is None:
-        _store = Store(DB_PATH)
-    return _store
-
-
-app = FastAPI(title="FedAgent Platform", version="0.1.0")
-
-
-class AppReg(BaseModel):
-    app_id: str
-    payload_type: str
-    plugin: str = "store_only"
+from fedplat.artifact_store import ArtifactStoreError, S3ArtifactStore
+from fedplat.protocol import (
+    ArtifactDescriptor,
+    FederationRegistration,
+    FedAppManifest,
+    MembershipSpec,
+    SiteRegistration,
+    StableId,
+    json_digest,
+)
+from fedplat.settings import Settings, get_settings
+from fedplat.store import ConflictError, Database, ForbiddenError, NotFoundError
 
 
-class SiteReg(BaseModel):
-    app_id: str
-    site_id: str
+app = FastAPI(title="FedAgent Platform", version="0.2.0")
 
 
-def fail(status: int, code: str, detail: str) -> None:
-    raise HTTPException(status_code=status, detail={"code": code, "message": detail})
+@app.middleware("http")
+async def limit_artifact_upload(request: Request, call_next):
+    if (
+        request.method == "POST"
+        and request.url.path.startswith("/site/v1/apps/")
+        and request.url.path.endswith("/artifacts")
+    ):
+        raw_length = request.headers.get("content-length")
+        if raw_length is None:
+            return JSONResponse(
+                status_code=411,
+                content={"detail": {"code": "E_LENGTH_REQUIRED", "message": "Content-Length is required"}},
+            )
+        try:
+            content_length = int(raw_length)
+        except ValueError:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": {"code": "E_BAD_LENGTH", "message": "invalid Content-Length"}},
+            )
+        configured_limit = getattr(app.state, "max_artifact_bytes", None)
+        max_artifact_bytes = configured_limit or get_settings().max_artifact_bytes
+        if content_length > max_artifact_bytes + 1024 * 1024:
+            return JSONResponse(
+                status_code=413,
+                content={
+                    "detail": {
+                        "code": "E_ARTIFACT_TOO_LARGE",
+                        "message": "artifact exceeds configured upload limit",
+                    }
+                },
+            )
+    return await call_next(request)
 
 
-def key_hash(key: str) -> str:
-    return hashlib.sha256(key.encode()).hexdigest()
+@lru_cache
+def get_database() -> Database:
+    return Database(get_settings().database_url)
+
+
+@lru_cache
+def get_artifact_store() -> S3ArtifactStore:
+    return S3ArtifactStore(get_settings())
+
+
+def fail(status: int, code: str, message: str) -> None:
+    raise HTTPException(status_code=status, detail={"code": code, "message": message})
+
+
+def token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def bearer_token(authorization: str | None) -> str:
+    if not authorization or not authorization.startswith("Bearer "):
+        fail(401, "E_AUTH", "missing bearer token")
+    token = authorization.removeprefix("Bearer ").strip()
+    if not token:
+        fail(401, "E_AUTH", "missing bearer token")
+    return token
+
+
+def require_admin(
+    settings: Annotated[Settings, Depends(get_settings)],
+    authorization: Annotated[str | None, Header()] = None,
+) -> None:
+    token = bearer_token(authorization)
+    if not secrets.compare_digest(token, settings.admin_token):
+        fail(401, "E_AUTH", "invalid admin credential")
+
+
+def authenticate_site(
+    db: Annotated[Database, Depends(get_database)],
+    authorization: Annotated[str | None, Header()] = None,
+) -> str:
+    try:
+        return db.authenticate_site(token_hash(bearer_token(authorization)))
+    except ForbiddenError as exc:
+        fail(401, "E_AUTH", str(exc))
+
+
+def map_store_error(exc: RuntimeError) -> None:
+    if isinstance(exc, ConflictError):
+        fail(409, "E_CONFLICT", str(exc))
+    if isinstance(exc, NotFoundError):
+        fail(404, "E_NOT_FOUND", str(exc))
+    if isinstance(exc, ForbiddenError):
+        fail(403, "E_FORBIDDEN", str(exc))
+    raise exc
 
 
 @app.get("/health")
-def health() -> dict:
+def health() -> dict[str, bool]:
     return {"ok": True}
 
 
-@app.post("/v1/registry/apps")
-def register_app(body: AppReg, store: Store = Depends(get_store)) -> dict:
+@app.get("/ready")
+def ready(
+    db: Annotated[Database, Depends(get_database)],
+    artifacts: Annotated[S3ArtifactStore, Depends(get_artifact_store)],
+) -> dict[str, bool]:
     try:
-        get_plugin(body.plugin)
-    except KeyError:
-        fail(400, "E_UNKNOWN_PLUGIN", body.plugin)
-    store.upsert_app(body.app_id, body.payload_type, body.plugin)
-    return {"ok": True, **body.model_dump()}
+        db.health()
+        artifacts.health()
+    except Exception:
+        fail(503, "E_NOT_READY", "database or object storage is unavailable")
+    return {"ok": True}
 
 
-@app.post("/v1/registry/sites")
-def register_site(body: SiteReg, store: Store = Depends(get_store)) -> dict:
-    key = secrets.token_urlsafe(24)
-    store.put_site(body.app_id, body.site_id, key_hash(key))
-    return {"app_id": body.app_id, "site_id": body.site_id, "api_key": key}
-
-
-@app.post("/v1/updates")
-def post_updates(
-    raw: dict,
-    store: Store = Depends(get_store),
-    authorization: str | None = Header(default=None),
-) -> dict:
+@app.post("/admin/v1/apps", dependencies=[Depends(require_admin)])
+def register_application(
+    body: FedAppManifest,
+    response: Response,
+    db: Annotated[Database, Depends(get_database)],
+) -> dict[str, Any]:
     try:
-        env = Envelope.model_validate(raw)
-    except ValidationError as e:
-        fail(400, "E_BAD_PROTOCOL", str(e))
+        for artifact_type in body.artifact_types:
+            Draft202012Validator.check_schema(artifact_type.metadata_schema)
+        for task_type in body.task_types:
+            Draft202012Validator.check_schema(task_type.input_schema)
+            Draft202012Validator.check_schema(task_type.output_schema)
+    except SchemaError as exc:
+        fail(400, "E_BAD_SCHEMA", exc.message)
 
-    if not env.consent:
-        fail(403, "E_NO_CONSENT", "consent must be true")
+    manifest = body.model_dump(by_alias=True, mode="json")
+    try:
+        created = db.register_application(manifest, json_digest(manifest))
+    except (ConflictError, NotFoundError, ForbiddenError) as exc:
+        map_store_error(exc)
+    response.status_code = 201 if created else 200
+    return {"app_id": body.app_id, "app_version": body.app_version, "created": created}
 
-    types = {it.payload_type for it in env.items}
-    if len(types) != 1:
-        fail(400, "E_MIXED_TYPE", "one payload_type per update")
-    payload_type = types.pop()
 
-    spec = store.get_app(env.app_id, payload_type)
-    if not spec:
-        fail(404, "E_UNKNOWN_APP", f"{env.app_id}/{payload_type}")
+@app.get("/admin/v1/apps", dependencies=[Depends(require_admin)])
+def list_applications(
+    db: Annotated[Database, Depends(get_database)],
+    after: StableId | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=100),
+) -> dict[str, Any]:
+    items = db.list_applications(after=after, limit=limit)
+    return {"items": items, "next": items[-1]["app_id"] if len(items) == limit else None}
 
-    site = store.get_site(env.app_id, env.site_id)
-    if not site:
-        fail(404, "E_UNKNOWN_SITE", env.site_id)
-    if not authorization or not authorization.startswith("Bearer "):
-        fail(401, "E_AUTH", "missing bearer token")
-    if key_hash(authorization.removeprefix("Bearer ").strip()) != site["key_hash"]:
-        fail(401, "E_AUTH", "bad key")
+
+@app.get("/admin/v1/apps/{app_id}/topology", dependencies=[Depends(require_admin)])
+def application_topology(
+    app_id: StableId,
+    db: Annotated[Database, Depends(get_database)],
+) -> dict[str, Any]:
+    try:
+        return db.topology(app_id)
+    except (ConflictError, NotFoundError, ForbiddenError) as exc:
+        map_store_error(exc)
+
+
+@app.post("/admin/v1/sites", status_code=201, dependencies=[Depends(require_admin)])
+def register_site(
+    body: SiteRegistration,
+    db: Annotated[Database, Depends(get_database)],
+) -> dict[str, str]:
+    api_key = secrets.token_urlsafe(32)
+    try:
+        db.register_site(body.site_id, body.display_name, api_key[:12], token_hash(api_key))
+    except (ConflictError, NotFoundError, ForbiddenError) as exc:
+        map_store_error(exc)
+    return {"site_id": body.site_id, "api_key": api_key}
+
+
+@app.post("/admin/v1/apps/{app_id}/federations", dependencies=[Depends(require_admin)])
+def create_federation(
+    app_id: StableId,
+    body: FederationRegistration,
+    response: Response,
+    db: Annotated[Database, Depends(get_database)],
+) -> dict[str, Any]:
+    try:
+        created = db.create_federation(app_id, body.federation_id, body.display_name)
+    except (ConflictError, NotFoundError, ForbiddenError) as exc:
+        map_store_error(exc)
+    response.status_code = 201 if created else 200
+    return {"app_id": app_id, "federation_id": body.federation_id, "created": created}
+
+
+@app.put(
+    "/admin/v1/apps/{app_id}/federations/{federation_id}/memberships/{site_id}",
+    dependencies=[Depends(require_admin)],
+)
+def put_membership(
+    app_id: StableId,
+    federation_id: StableId,
+    site_id: StableId,
+    body: MembershipSpec,
+    db: Annotated[Database, Depends(get_database)],
+) -> dict[str, Any]:
+    permissions = body.model_dump()
+    try:
+        db.put_membership(app_id, federation_id, site_id, permissions)
+    except (ConflictError, NotFoundError, ForbiddenError) as exc:
+        map_store_error(exc)
+    return {"app_id": app_id, "federation_id": federation_id, "site_id": site_id, **permissions}
+
+
+@app.get(
+    "/admin/v1/apps/{app_id}/federations/{federation_id}/submissions",
+    dependencies=[Depends(require_admin)],
+)
+def list_submissions(
+    app_id: StableId,
+    federation_id: StableId,
+    db: Annotated[Database, Depends(get_database)],
+    limit: int = Query(default=50, ge=1, le=100),
+) -> dict[str, Any]:
+    return {"items": db.list_submissions(app_id, federation_id, limit)}
+
+
+@app.post("/site/v1/apps/{app_id}/federations/{federation_id}/artifacts", status_code=201)
+def submit_artifact(
+    app_id: StableId,
+    federation_id: StableId,
+    response: Response,
+    descriptor_json: Annotated[str, Form(alias="descriptor")],
+    content: Annotated[UploadFile, File()],
+    idempotency_key: Annotated[
+        str,
+        Header(alias="Idempotency-Key", min_length=1, max_length=160),
+    ],
+    site_id: Annotated[str, Depends(authenticate_site)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    db: Annotated[Database, Depends(get_database)],
+    artifacts: Annotated[S3ArtifactStore, Depends(get_artifact_store)],
+) -> dict[str, Any]:
+    try:
+        descriptor = ArtifactDescriptor.model_validate_json(descriptor_json)
+    except ValidationError as exc:
+        fail(400, "E_BAD_DESCRIPTOR", str(exc))
 
     try:
-        plugin = get_plugin(spec["plugin"])
-    except KeyError:
-        fail(500, "E_UNKNOWN_PLUGIN", spec["plugin"])
-
-    accepted = 0
-    for item in env.items:
-        try:
-            plugin.validate_item(item)
-        except ValueError as e:
-            fail(400, "E_VALIDATE", str(e))
-        if store.upsert_item(
-            {
-                "app_id": env.app_id,
-                "site_id": env.site_id,
-                "fingerprint": item.fingerprint,
-                "payload_type": item.payload_type,
-                "body": item.body,
-                "quality": item.quality.model_dump(),
-                "produced_at": item.produced_at.isoformat(),
-            }
-        ):
-            accepted += 1
-
-    items = store.list_items(env.app_id, payload_type)
-    state = plugin.aggregate(items, None)
-    payload = plugin.render_digest(state, env.site_id)
-    digest_id = str(uuid.uuid4())
-    store.put_digest(
-        {
-            "digest_id": digest_id,
-            "app_id": env.app_id,
-            "site_id": env.site_id,
-            "payload_type": payload_type,
-            "body": payload,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-    )
-    return {"ok": True, "accepted_new": accepted, "digest_id": digest_id}
-
-
-@app.get("/v1/digests/latest")
-def latest_digest(
-    app_id: str = Query(),
-    site_id: str = Query(),
-    payload_type: str = Query(),
-    store: Store = Depends(get_store),
-    authorization: str | None = Header(default=None),
-) -> Digest:
-    site = store.get_site(app_id, site_id)
-    if not site:
-        fail(404, "E_UNKNOWN_SITE", site_id)
-    if not authorization or not authorization.startswith("Bearer "):
-        fail(401, "E_AUTH", "missing bearer token")
-    if key_hash(authorization.removeprefix("Bearer ").strip()) != site["key_hash"]:
-        fail(401, "E_AUTH", "bad key")
-
-    row = store.latest_digest(app_id, site_id, payload_type)
-    if not row:
-        return Digest(
-            digest_id="empty",
-            app_id=app_id,
-            site_id=site_id,
-            payload_type=payload_type,
+        policy = db.submission_policy(
+            app_id, federation_id, site_id, descriptor.type_name, descriptor.format_version
         )
-    body = row["body"]
-    return Digest(
-        digest_id=row["digest_id"],
-        app_id=app_id,
-        site_id=site_id,
-        payload_type=payload_type,
-        items=body.get("items", []),
-        ops=body.get("ops", []),
-    )
+    except (ConflictError, NotFoundError, ForbiddenError) as exc:
+        map_store_error(exc)
+
+    if descriptor.media_type != policy["media_type"]:
+        fail(400, "E_MEDIA_TYPE", "descriptor media_type does not match ArtifactType")
+    if content.content_type and content.content_type != descriptor.media_type:
+        fail(400, "E_MEDIA_TYPE", "upload content type does not match descriptor")
+    try:
+        Draft202012Validator(policy["metadata_schema"]).validate(descriptor.metadata)
+    except JsonSchemaValidationError as exc:
+        fail(400, "E_BAD_METADATA", exc.message)
+
+    if descriptor.size_bytes > settings.max_artifact_bytes:
+        fail(413, "E_ARTIFACT_TOO_LARGE", "artifact exceeds configured upload limit")
+    digest = hashlib.sha256()
+    actual_size = 0
+    content.file.seek(0)
+    while chunk := content.file.read(1024 * 1024):
+        actual_size += len(chunk)
+        if actual_size > settings.max_artifact_bytes:
+            fail(413, "E_ARTIFACT_TOO_LARGE", "artifact exceeds configured upload limit")
+        digest.update(chunk)
+    actual_digest = "sha256:" + digest.hexdigest()
+    if actual_size != descriptor.size_bytes or actual_digest != descriptor.digest:
+        fail(400, "E_DIGEST", "artifact size or digest verification failed")
+
+    try:
+        storage_key = artifacts.put_file(
+            app_id=app_id,
+            federation_id=federation_id,
+            digest=descriptor.digest,
+            size_bytes=descriptor.size_bytes,
+            media_type=descriptor.media_type,
+            file=content.file,
+        )
+    except ArtifactStoreError as exc:
+        fail(502, "E_ARTIFACT_STORE", str(exc))
+
+    descriptor_data = descriptor.model_dump(by_alias=True, mode="json")
+    try:
+        submission, created = db.create_submission(
+            app_id=app_id,
+            federation_id=federation_id,
+            site_id=site_id,
+            descriptor=descriptor_data,
+            storage_key=storage_key,
+            idempotency_key=idempotency_key,
+        )
+    except (ConflictError, NotFoundError, ForbiddenError) as exc:
+        map_store_error(exc)
+    response.status_code = 201 if created else 200
+    return {
+        "submission_id": submission["submission_id"],
+        "artifact_digest": submission["artifact_digest"],
+        "created_at": submission["created_at"],
+        "created": created,
+    }

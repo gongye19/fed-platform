@@ -344,6 +344,6 @@ audit_log(created_at DESC)
 - PostgreSQL 16+；正式中心数据库的集成测试也使用 PostgreSQL，不用 SQLite 模拟。
 - Python 使用 psycopg 3 和明确 SQL，不先增加 ORM；复合键、`SKIP LOCKED` 和幂等写入直接用 SQL 更清楚。
 - Schema 使用编号 SQL migration，由独立 migrate 命令执行，不在每个 API 进程启动时自动改表。
-- 当前 spike 的 `apps/sites/items/digests` 是一次性验证数据，不迁移到新 schema。
+- 旧 spike 的 `apps/sites/items/digests` 已删除，不迁移；正式 schema 从编号 migration 开始。
 
 v1 先实现这些固定表和状态约束；不会为 memory、skill、经验、LoRA、模型权重分别增加业务表。

@@ -122,7 +122,7 @@ path style。其余差异由 S3 client 处理。
 - 无数据库的协议/状态机单元测试可直接在 Mac 运行；
 - 数据库集成测试由 CI 启动临时 PostgreSQL，或手工连接 Railway development 环境。
 
-当前 spike 的 SQLite 只保留为旧验证代码，不作为新平台的开发数据库。
+旧 SQLite spike 已删除；正式中心数据库开发和集成测试均使用 PostgreSQL。
 
 ---
 
@@ -242,4 +242,4 @@ PostgreSQL 16+
 - 不建设跨云双写、自动故障转移或 Kubernetes Operator。
 - 不因未来可能自建而现在先买服务器和维护数据库。
 
-下一步实现时，只增加 psycopg 3、一个 S3 client、编号 SQL migration 和上述环境变量读取。
+当前已实现 psycopg 3、S3 client、编号 SQL migration 和上述环境变量契约；部署服务只需注入配置。
