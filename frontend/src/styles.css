@@ -325,6 +325,7 @@ td small { margin-top: 4px; }
 .architecture-workbench__bar small { color: var(--muted); font-size: 10px; }
 .fixed-diagram-scroll { overflow-x: auto; }
 .react-flow-canvas { min-width: 900px; height: 640px; background: #0d0e11; }
+.react-flow-canvas--hierarchy { height: 720px; }
 .react-flow-canvas--flow { height: 560px; }
 .react-flow-canvas .react-flow { --xy-background-color: #0d0e11; }
 .react-flow-canvas .react-flow__node { border-radius: var(--radius-sm); outline: none; }
@@ -342,6 +343,9 @@ td small { margin-top: 4px; }
 .flow-node strong, .flow-node small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .flow-node strong { font-size: 12px; font-weight: 560; }
 .flow-node small { color: var(--muted); font-size: 9px; }
+.react-flow-canvas--hierarchy .flow-node { padding: 12px 14px; }
+.react-flow-canvas--hierarchy .flow-node strong { font-size: 13px; }
+.react-flow-canvas--hierarchy .flow-node small { font-size: 10px; }
 .flow-node .react-flow__handle { width: 1px; height: 1px; min-width: 1px; min-height: 1px; opacity: 0; }
 .react-flow-canvas .react-flow__edge-text { fill: #a2a7b0; font: 500 9px "Geist Mono Variable", monospace; }
 .react-flow-canvas .react-flow__edge-textbg { fill: #101116; fill-opacity: .96; stroke: var(--line); stroke-width: 1px; }

@@ -81,8 +81,7 @@ function DiagramLayerNode({ data }: NodeProps<LayerNode>) {
 }
 
 const nodeTypes: NodeTypes = { platform: PlatformDiagramNode, layer: DiagramLayerNode };
-const marker = { type: MarkerType.ArrowClosed, width: 14, height: 14, color: "#747b88" } as const;
-const activeMarker = { ...marker, color: "#7c86ea" } as const;
+const activeMarker = { type: MarkerType.ArrowClosed, width: 14, height: 14, color: "#7c86ea" } as const;
 
 function verticalEdge(id: string, source: string, target: string, label?: string): Edge {
   return {
@@ -93,8 +92,9 @@ function verticalEdge(id: string, source: string, target: string, label?: string
     targetHandle: "top",
     type: "smoothstep",
     label,
-    markerEnd: marker,
-    style: { stroke: "#747b88", strokeWidth: 1.2 },
+    animated: true,
+    markerEnd: activeMarker,
+    style: { stroke: "#7c86ea", strokeWidth: 1.35 },
   };
 }
 
@@ -114,19 +114,19 @@ function horizontalEdge(id: string, source: string, target: string, label?: stri
 }
 
 const hierarchyNodes: DiagramNode[] = [
-  { id: "layer-app", type: "layer", position: { x: 0, y: 0 }, data: { title: "01  应用层", subtitle: "平台上注册多个独立应用", tone: "plain" }, style: { width: 1200, height: 116 }, selectable: false, focusable: false, draggable: false },
-  { id: "layer-agent", type: "layer", position: { x: 0, y: 136 }, data: { title: "02  应用联邦 Agent 层", subtitle: "每个应用都有一个专属 Agent", tone: "platform" }, style: { width: 1200, height: 126 }, selectable: false, focusable: false, draggable: false },
-  { id: "layer-federation", type: "layer", position: { x: 0, y: 282 }, data: { title: "03  联邦域层", subtitle: "Agent 管理本应用的一个或多个联邦域", tone: "platform" }, style: { width: 1200, height: 126 }, selectable: false, focusable: false, draggable: false },
-  { id: "layer-sites", type: "layer", position: { x: 0, y: 428 }, data: { title: "04  站点层", subtitle: "不同站点通过成员关系加入所属应用", tone: "sites" }, style: { width: 1200, height: 176 }, selectable: false, focusable: false, draggable: false },
+  { id: "layer-app", type: "layer", position: { x: 0, y: 0 }, data: { title: "01  应用层", subtitle: "平台上注册多个独立应用", tone: "plain" }, style: { width: 1200, height: 132 }, selectable: false, focusable: false, draggable: false },
+  { id: "layer-agent", type: "layer", position: { x: 0, y: 152 }, data: { title: "02  应用联邦 Agent 层", subtitle: "每个应用都有一个专属 Agent", tone: "platform" }, style: { width: 1200, height: 142 }, selectable: false, focusable: false, draggable: false },
+  { id: "layer-federation", type: "layer", position: { x: 0, y: 314 }, data: { title: "03  联邦域层", subtitle: "Agent 管理本应用的一个或多个联邦域", tone: "platform" }, style: { width: 1200, height: 142 }, selectable: false, focusable: false, draggable: false },
+  { id: "layer-sites", type: "layer", position: { x: 0, y: 476 }, data: { title: "04  站点层", subtitle: "不同站点通过成员关系加入所属应用", tone: "sites" }, style: { width: 1200, height: 202 }, selectable: false, focusable: false, draggable: false },
 
   ...(["A", "B", "N"] as const).map((suffix, index): PlatformNode => ({
     id: `app-${suffix}`,
     type: "platform",
     parentId: "layer-app",
     extent: "parent",
-    position: { x: 150 + index * 340, y: 40 },
+    position: { x: 115 + index * 360, y: 46 },
     data: { title: `应用 ${suffix}`, subtitle: "定义站点如何协作", moduleId: "application" },
-    style: { width: 220, height: 58 },
+    style: { width: 250, height: 72 },
     ariaLabel: `应用 ${suffix}`,
   })),
   ...(["A", "B", "N"] as const).map((suffix, index): PlatformNode => ({
@@ -134,9 +134,9 @@ const hierarchyNodes: DiagramNode[] = [
     type: "platform",
     parentId: "layer-agent",
     extent: "parent",
-    position: { x: 150 + index * 340, y: 44 },
+    position: { x: 115 + index * 360, y: 50 },
     data: { title: `应用联邦 Agent ${suffix}`, subtitle: `仅服务应用 ${suffix}`, moduleId: "agent" },
-    style: { width: 220, height: 58 },
+    style: { width: 250, height: 72 },
     ariaLabel: `应用 ${suffix} 的联邦 Agent`,
   })),
   ...(["A", "B", "N"] as const).map((suffix, index): PlatformNode => ({
@@ -144,9 +144,9 @@ const hierarchyNodes: DiagramNode[] = [
     type: "platform",
     parentId: "layer-federation",
     extent: "parent",
-    position: { x: 150 + index * 340, y: 44 },
+    position: { x: 115 + index * 360, y: 50 },
     data: { title: `联邦域 ${suffix}`, subtitle: `组织应用 ${suffix} 的协作站点`, moduleId: "federation" },
-    style: { width: 220, height: 58 },
+    style: { width: 250, height: 72 },
     ariaLabel: `应用 ${suffix} 的联邦域`,
   })),
   ...(["A", "B", "N"] as const).flatMap((app, appIndex) =>
@@ -155,9 +155,9 @@ const hierarchyNodes: DiagramNode[] = [
       type: "platform",
       parentId: "layer-sites",
       extent: "parent",
-      position: { x: 112 + appIndex * 340 + siteIndex * 104, y: 70 },
+      position: { x: 76 + appIndex * 360 + siteIndex * 112, y: 78 },
       data: { title: `站点 ${app}-${site}`, subtitle: `属于应用 ${app}`, moduleId: "site" },
-      style: { width: 96, height: 58 },
+      style: { width: 108, height: 68 },
       ariaLabel: `应用 ${app} 的站点 ${site}`,
     })),
   ),
