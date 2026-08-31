@@ -689,7 +689,7 @@ class Database:
                 (limit,),
             ).fetchall()
 
-    def list_activity(self, limit: int) -> list[dict[str, Any]]:
+    def list_activity(self, limit: int, app_id: str | None = None) -> list[dict[str, Any]]:
         with self.connection() as conn:
             return conn.execute(
                 """SELECT * FROM (
@@ -703,9 +703,10 @@ class Database:
                             entity_id AS target_id, payload AS detail, 'success' AS result
                      FROM events
                    ) activity
+                   WHERE (%s::text IS NULL OR app_id = %s)
                    ORDER BY created_at DESC
                    LIMIT %s""",
-                (limit,),
+                (app_id, app_id, limit),
             ).fetchall()
 
     def create_release(

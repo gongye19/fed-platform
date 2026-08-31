@@ -303,6 +303,10 @@ def test_registry_and_artifact_submission(live_stack):
     assert detail.json()["deliveries"][0]["state"] == "rolled_back"
     assert client.get("/admin/v1/sites", headers=admin).json()["items"][0]["site_id"] == site_id
     assert client.get("/admin/v1/activity", headers=admin).json()["items"]
+    assert all(
+        item["app_id"] == app_id
+        for item in client.get(f"/admin/v1/activity?app_id={app_id}", headers=admin).json()["items"]
+    )
 
     job = database.claim_agent_job("integration-worker")
     assert job and job["app_id"] == app_id and job["core_plugin_id"] == "manual-channel"

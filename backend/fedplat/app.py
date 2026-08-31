@@ -311,9 +311,10 @@ def list_sites(
 @app.get("/admin/v1/activity", dependencies=[Depends(require_admin)])
 def list_activity(
     db: Annotated[Database, Depends(get_database)],
+    app_id: StableId | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=100),
 ) -> dict[str, Any]:
-    return {"items": db.list_activity(limit)}
+    return {"items": db.list_activity(limit, app_id)}
 
 
 @app.post("/admin/v1/apps/{app_id}/federations", dependencies=[Depends(require_admin)])

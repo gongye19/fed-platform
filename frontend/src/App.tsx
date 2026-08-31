@@ -89,6 +89,22 @@ type Activity = {
   result: string;
 };
 
+const APP_SECTIONS = [
+  ["overview", "概览"],
+  ["sites", "站点"],
+  ["versions", "版本"],
+  ["evaluations", "效果"],
+  ["timeline", "时间线"],
+  ["activity", "活动日志"],
+  ["artifacts", "工件"],
+  ["contract", "契约"],
+] as const;
+type AppSection = typeof APP_SECTIONS[number][0];
+
+function appSection(value?: string): AppSection {
+  return APP_SECTIONS.some(([id]) => id === value) ? value as AppSection : "overview";
+}
+
 class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -148,6 +164,23 @@ function shortId(value: string, length = 18) {
   return value.length > length ? `${value.slice(0, length)}…` : value;
 }
 
+function activityLabel(action: string) {
+  return ({
+    "submission.received": "收到站点贡献",
+    "evaluation.received": "收到站点评测",
+    "release.created": "创建联邦版本",
+    "release.stage.requested": "下发暂存命令",
+    "release.activate.requested": "下发启用命令",
+    "release.rollback.requested": "下发回滚命令",
+    "delivery.staged": "站点已暂存版本",
+    "delivery.active": "站点已启用版本",
+    "delivery.rolled_back": "站点已回滚版本",
+    "agent.job.completed": "Agent 已处理事件",
+    "agent.job.failed": "Agent 处理失败",
+    "membership.updated": "站点成员已更新",
+  } as Record<string, string>)[action] || action;
+}
+
 function Status({ value }: { value: string }) {
   const tone = ["failed", "disabled", "offline", "reject"].includes(value)
     ? "bad"
@@ -186,17 +219,50 @@ function Shell({ path, navigate }: {
   path: string;
   navigate: (path: string) => void;
 }) {
-  const appMatch = path.match(/^\/apps\/([^/]+)$/);
+  const appMatch = path.match(/^\/apps\/([^/]+)(?:\/([^/]+))?$/);
+  const selectedAppId = appMatch ? decodeURIComponent(appMatch[1]) : "";
+  const selectedSection = appSection(appMatch?.[2]);
+  const [applicationsOpen, setApplicationsOpen] = useState(path.startsWith("/apps"));
+  const [applications, setApplications] = useState<Application[]>([]);
+  useEffect(() => {
+    if (path.startsWith("/apps")) setApplicationsOpen(true);
+  }, [path]);
+  useEffect(() => {
+    void api<{ items: Application[] }>("/admin/v1/apps?limit=100")
+      .then((data) => setApplications(data.items))
+      .catch(() => setApplications([]));
+  }, []);
   return (
     <div className="shell">
       <aside className="sidebar">
         <button className="brand" onClick={() => navigate("/")}><strong>FED</strong><span>联邦控制面</span></button>
         <p className="sidebar__label">联邦工作区</p>
         <nav aria-label="主导航">
-          <button className={path === "/" ? "active" : ""} onClick={() => navigate("/")}>概览</button>
-          <button className={path === "/apps" || appMatch ? "active" : ""} onClick={() => navigate("/apps")}>应用</button>
-          <button className={path === "/sites" ? "active" : ""} onClick={() => navigate("/sites")}>站点</button>
-          <button className={path === "/activity" ? "active" : ""} onClick={() => navigate("/activity")}>活动</button>
+          <button className={path === "/" ? "active" : ""} onClick={() => navigate("/")} aria-current={path === "/" ? "page" : undefined}>概览</button>
+          <button
+            className={path.startsWith("/apps") ? "active sidebar__apps-toggle" : "sidebar__apps-toggle"}
+            onClick={() => {
+              if (path === "/apps") setApplicationsOpen((current) => !current);
+              else { setApplicationsOpen(true); navigate("/apps"); }
+            }}
+            aria-expanded={applicationsOpen}
+          >
+            <span>应用</span><span aria-hidden="true">{applicationsOpen ? "−" : "+"}</span>
+          </button>
+          {applicationsOpen && <div className="sidebar-apps">
+            {applications.map((item) => {
+              const selected = item.app_id === selectedAppId;
+              const base = `/apps/${encodeURIComponent(item.app_id)}`;
+              return <div className="sidebar-app" key={item.app_id}>
+                <button className={selected ? "sidebar-app__name active" : "sidebar-app__name"} onClick={() => navigate(`${base}/overview`)}>
+                  <span>{item.display_name}</span><small>{item.current_version}</small>
+                </button>
+                {selected && <div className="sidebar-app__sections" aria-label={`${item.display_name} 导航`}>
+                  {APP_SECTIONS.map(([id, label]) => <button key={id} className={selectedSection === id ? "active" : ""} aria-current={selectedSection === id ? "page" : undefined} onClick={() => navigate(`${base}/${id}`)}>{label}</button>)}
+                </div>}
+              </div>;
+            })}
+          </div>}
         </nav>
         <div className="sidebar__foot">
           <span className="connection"><i />API 已连接</span>
@@ -207,13 +273,9 @@ function Shell({ path, navigate }: {
         {path === "/" ? (
           <PlatformOverview />
         ) : appMatch ? (
-          <ApplicationDetail appId={decodeURIComponent(appMatch[1])} navigate={navigate} />
+          <ApplicationDetail appId={selectedAppId} section={selectedSection} navigate={navigate} />
         ) : path === "/apps" ? (
           <ApplicationsPage navigate={navigate} />
-        ) : path === "/sites" ? (
-          <SitesPage />
-        ) : path === "/activity" ? (
-          <ActivityPage />
         ) : (
           <PlatformOverview />
         )}
@@ -262,7 +324,7 @@ function ApplicationsPage({ navigate }: { navigate: (path: string) => void }) {
       <section className="ledger" aria-busy={loading}>
         <div className="ledger__head"><span>APPLICATION</span><span>AGENT CORE</span><span>FEDERATIONS</span><span>SITES</span><span>STATE</span></div>
         {!loading && visible.length === 0 ? <Empty>没有匹配的应用。注册第一个 FedApp Manifest 后，平台会同时创建它的 Agent。</Empty> : visible.map((item) => (
-          <button className="ledger__row" key={item.app_id} onClick={() => navigate(`/apps/${encodeURIComponent(item.app_id)}`)}>
+          <button className="ledger__row" key={item.app_id} onClick={() => navigate(`/apps/${encodeURIComponent(item.app_id)}/overview`)}>
             <span><strong>{item.display_name}</strong><small className="mono">{item.app_id} · v{item.current_version}</small></span>
             <span><Status value={item.agent_status} /><small className="mono">{item.core_plugin_id}</small></span>
             <span className="ledger__number">{item.federation_count}</span>
@@ -302,60 +364,14 @@ function RegisterApplication({ onClose, onCreated }: { onClose: () => void; onCr
   return <Modal title="注册应用契约" onClose={onClose}><form onSubmit={submit} className="stack"><p className="hint">提交完整 FedApp Manifest。相同版本注册后不可改变语义。</p><label>Manifest JSON<textarea className="code-field" value={manifest} onChange={(event) => setManifest(event.target.value)} rows={18} spellCheck={false} /></label>{error && <ErrorMessage error={error} />}<div className="dialog__actions"><button type="button" className="button button--quiet" onClick={onClose}>取消</button><button className="button button--primary">注册应用</button></div></form></Modal>;
 }
 
-function SitesPage() {
-  const [items, setItems] = useState<Site[]>([]);
-  const [error, setError] = useState("");
-  const [registering, setRegistering] = useState(false);
-  const [credential, setCredential] = useState<{ site: string; token: string } | null>(null);
-  const load = async () => {
-    try {
-      setItems((await api<{ items: Site[] }>("/admin/v1/sites?limit=100")).items);
-      setError("");
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "加载失败"); }
-  };
-  useEffect(() => { void load(); }, []);
-  async function register(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    try {
-      const result = await api<{ site_id: string; api_key: string }>("/admin/v1/sites", { method: "POST", body: JSON.stringify({ site_id: form.get("site_id"), display_name: form.get("display_name") }) });
-      setRegistering(false);
-      setCredential({ site: result.site_id, token: result.api_key });
-      await load();
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "注册失败"); }
-  }
-  return <>
-    <PageHeader eyebrow="Registry / Sites" title="站点" meta={`${items.length} 个联邦节点 · 跨应用只展示注册和健康状态`} action={<button className="button button--primary" onClick={() => setRegistering(true)}>注册站点</button>} />
-    {error && <ErrorMessage error={error} />}
-    <section className="table-wrap"><table><thead><tr><th>站点</th><th>连接</th><th>应用</th><th>成员关系</th><th>待拉取命令</th><th>最后出现</th></tr></thead><tbody>{items.map((site) => <tr key={site.site_id}><td><strong>{site.display_name}</strong><small className="mono">{site.site_id}</small></td><td><Status value={site.last_seen_at ? "online" : "not-seen"} /></td><td>{site.application_count}</td><td>{site.membership_count}</td><td>{site.pending_commands}</td><td>{formatTime(site.last_seen_at)}</td></tr>)}</tbody></table>{items.length === 0 && <Empty>尚未注册站点。站点注册后才能加入应用的 Federation。</Empty>}</section>
-    {registering && <Modal title="注册站点" onClose={() => setRegistering(false)}><form className="stack" onSubmit={register}><label>Site ID<input name="site_id" required pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,127}" placeholder="site-hk-01" /></label><label>显示名称<input name="display_name" required maxLength={160} placeholder="Hong Kong Node" /></label><div className="dialog__actions"><button type="button" className="button button--quiet" onClick={() => setRegistering(false)}>取消</button><button className="button button--primary">签发凭据</button></div></form></Modal>}
-    {credential && <Modal title="保存站点凭据" onClose={() => setCredential(null)}><div className="stack"><p className="message message--warning">API Key 只显示这一次。现在复制并交给 {credential.site} 的 Federation Node。</p><code className="credential">{credential.token}</code><button className="button button--primary" onClick={() => navigator.clipboard.writeText(credential.token)}>复制 API Key</button></div></Modal>}
-  </>;
-}
-
-function ActivityPage() {
-  const [items, setItems] = useState<Activity[]>([]);
-  const [error, setError] = useState("");
-  const load = async () => {
-    try { setItems((await api<{ items: Activity[] }>("/admin/v1/activity?limit=100")).items); setError(""); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "加载失败"); }
-  };
-  useEffect(() => { void load(); }, []);
-  return <>
-    <PageHeader eyebrow="Operations / Activity" title="活动" meta="注册、提交、发布与投递状态的统一时间线" action={<button className="button button--quiet" onClick={load}>刷新</button>} />
-    {error && <ErrorMessage error={error} />}
-    <section className="timeline">{items.map((item, index) => <article key={`${item.created_at}-${index}`} className="timeline__item"><time>{formatTime(item.created_at)}</time><span className="timeline__node" /><div><div className="timeline__title"><strong>{item.action}</strong><Status value={item.result} /></div><p className="mono">{[item.app_id, item.federation_id, item.site_id].filter(Boolean).join(" / ") || "platform"}</p><small>{item.target_type} · {shortId(item.target_id, 32)} · {item.source}</small></div></article>)}{items.length === 0 && <Empty>还没有活动记录。</Empty>}</section>
-  </>;
-}
-
-function ApplicationDetail({ appId, navigate }: { appId: string; navigate: (path: string) => void }) {
+function ApplicationDetail({ appId, section, navigate }: { appId: string; section: AppSection; navigate: (path: string) => void }) {
   const [topology, setTopology] = useState<Topology | null>(null);
   const [sites, setSites] = useState<Site[]>([]);
   const [federationId, setFederationId] = useState("");
-  const [tab, setTab] = useState("overview");
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [evaluations, setEvaluations] = useState<Submission[]>([]);
   const [releases, setReleases] = useState<ReleaseSummary[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [detail, setDetail] = useState<ReleaseDetail | null>(null);
   const [selectedDigests, setSelectedDigests] = useState<string[]>([]);
   const [error, setError] = useState("");
@@ -393,6 +409,11 @@ function ApplicationDetail({ appId, navigate }: { appId: string; navigate: (path
   };
   useEffect(() => { void loadTopology(); }, [appId]);
   useEffect(() => { void loadChannel(); setDetail(null); }, [appId, federationId]);
+  useEffect(() => {
+    void api<{ items: Activity[] }>(`/admin/v1/activity?app_id=${encodeURIComponent(appId)}&limit=100`)
+      .then((data) => setActivities(data.items))
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "活动加载失败"));
+  }, [appId]);
 
   const uniqueArtifacts = useMemo(() => Array.from(new Map(submissions.map((item) => [item.artifact_digest, item])).values()), [submissions]);
   async function createFederation(event: FormEvent<HTMLFormElement>) {
@@ -442,18 +463,23 @@ function ApplicationDetail({ appId, navigate }: { appId: string; navigate: (path
 
   if (!topology) return <><PageHeader eyebrow="Registry / Application" title={appId} meta="正在加载应用拓扑…" />{error && <ErrorMessage error={error} />}</>;
   const app = topology.application;
+  const sectionLabel = APP_SECTIONS.find(([id]) => id === section)?.[1] || "概览";
+  const base = `/apps/${encodeURIComponent(appId)}`;
   return <>
     <button className="back" onClick={() => navigate("/apps")}>← 返回应用列表</button>
-    <PageHeader eyebrow="Application / Topology" title={app.display_name} meta={`${app.app_id} · v${app.current_version}`} action={<div className="header-actions"><button className="button button--quiet" onClick={() => setMembershipModal(true)} disabled={!topology.federations.length || !sites.length}>配置成员</button><button className="button button--primary" onClick={() => setFederationModal(true)}>新建 Federation</button></div>} />
+    <PageHeader eyebrow={`应用 / ${sectionLabel}`} title={app.display_name} meta={`${app.app_id} · v${app.current_version}`} action={<div className="header-actions"><button className="button button--quiet" onClick={() => setMembershipModal(true)} disabled={!topology.federations.length || !sites.length}>配置成员</button><button className="button button--primary" onClick={() => setFederationModal(true)}>新建 Federation</button></div>} />
     <div className="app-state"><Status value={app.status} /><span>Agent</span><Status value={app.agent_status} /><code>{app.core_plugin_id}</code></div>
     {error && <ErrorMessage error={error} />}{notice && <p className="message message--success" role="status">{notice}<button onClick={() => setNotice("")} aria-label="关闭提示">×</button></p>}
-    <div className="tabs" role="tablist" aria-label="应用详情"><button className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")}>拓扑</button><button className={tab === "artifacts" ? "active" : ""} onClick={() => setTab("artifacts")}>工件</button><button className={tab === "evaluations" ? "active" : ""} onClick={() => setTab("evaluations")}>效果</button><button className={tab === "releases" ? "active" : ""} onClick={() => setTab("releases")}>发布</button><button className={tab === "contract" ? "active" : ""} onClick={() => setTab("contract")}>契约</button></div>
-    {tab === "overview" && <TopologyView topology={topology} onSelect={(id) => { setFederationId(id); setTab("artifacts"); }} />}
-    {tab !== "overview" && tab !== "contract" && <FederationSwitch items={topology.federations} value={federationId} onChange={setFederationId} />}
-    {tab === "artifacts" && <Artifacts submissions={submissions} />}
-    {tab === "evaluations" && <Evaluations items={evaluations} />}
-    {tab === "releases" && <Releases releases={releases} artifacts={uniqueArtifacts} selected={selectedDigests} onSelected={setSelectedDigests} onCreate={createRelease} detail={detail} onOpen={openRelease} onAction={deliveryAction} />}
-    {tab === "contract" && <Contract manifest={app.manifest} />}
+    <div className="mobile-app-nav" aria-label={`${app.display_name} 导航`}>{APP_SECTIONS.map(([id, label]) => <button key={id} className={section === id ? "active" : ""} onClick={() => navigate(`${base}/${id}`)}>{label}</button>)}</div>
+    {section === "overview" && <TopologyView topology={topology} onSelect={(id) => { setFederationId(id); navigate(`${base}/artifacts`); }} />}
+    {!["overview", "sites", "timeline", "activity", "contract"].includes(section) && <FederationSwitch items={topology.federations} value={federationId} onChange={setFederationId} />}
+    {section === "sites" && <ApplicationSites topology={topology} sites={sites} />}
+    {section === "artifacts" && <Artifacts submissions={submissions} />}
+    {section === "evaluations" && <Evaluations items={evaluations} />}
+    {section === "versions" && <Releases releases={releases} artifacts={uniqueArtifacts} selected={selectedDigests} onSelected={setSelectedDigests} onCreate={createRelease} detail={detail} onOpen={openRelease} onAction={deliveryAction} />}
+    {section === "timeline" && <ActivityTimeline items={activities} />}
+    {section === "activity" && <ActivityLog items={activities} />}
+    {section === "contract" && <Contract manifest={app.manifest} />}
     {federationModal && <Modal title="新建 Federation" onClose={() => setFederationModal(false)}><form className="stack" onSubmit={createFederation}><label>Federation ID<input name="federation_id" required pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,127}" placeholder="main" /></label><label>显示名称<input name="display_name" required maxLength={160} placeholder="Main Federation" /></label><div className="dialog__actions"><button type="button" className="button button--quiet" onClick={() => setFederationModal(false)}>取消</button><button className="button button--primary">创建</button></div></form></Modal>}
     {membershipModal && <Modal title="配置成员权限" onClose={() => setMembershipModal(false)}><form className="stack" onSubmit={addMembership}><label>Federation<select name="federation_id" defaultValue={federationId}>{topology.federations.map((item) => <option key={item.federation_id} value={item.federation_id}>{item.display_name} · {item.federation_id}</option>)}</select></label><label>站点<select name="site_id">{sites.map((site) => <option key={site.site_id} value={site.site_id}>{site.display_name} · {site.site_id}</option>)}</select></label><fieldset className="checks"><legend>权限</legend><label><input type="checkbox" name="can_submit" />提交工件</label><label><input type="checkbox" name="can_receive" />接收发布</label><label><input type="checkbox" name="can_execute_task" />执行任务</label></fieldset><div className="dialog__actions"><button type="button" className="button button--quiet" onClick={() => setMembershipModal(false)}>取消</button><button className="button button--primary">保存成员</button></div></form></Modal>}
   </>;
@@ -467,6 +493,21 @@ function TopologyView({ topology, onSelect }: { topology: Topology; onSelect: (i
   return <section className="topology"><div className="topology__legend"><span>FEDERATION TOPOLOGY</span><span>{topology.federations.length} federations · {topology.memberships.length} memberships</span></div><div className="topology__root"><p>APP FEDERATION AGENT</p><strong>{topology.application.display_name}</strong><code>{topology.application.core_plugin_id}</code></div><div className="topology__branches">{topology.federations.map((federation) => { const members = topology.memberships.filter((item) => item.federation_id === federation.federation_id); return <article className="topology__branch" key={federation.federation_id}><button className="topology__federation" onClick={() => onSelect(federation.federation_id)}><span>FEDERATION</span><strong>{federation.display_name}</strong><code>{federation.federation_id}</code></button><div className="topology__sites">{members.map((member) => <div className="topology__site" key={member.site_id}><div><strong>{member.display_name}</strong><code>{member.site_id}</code></div><Status value={member.last_seen_at ? "online" : "not-seen"} /><p>{[member.can_submit && "submit", member.can_receive && "receive", member.can_execute_task && "execute"].filter(Boolean).join(" / ") || "no permissions"}</p></div>)}{members.length === 0 && <Empty>这个 Federation 还没有成员。</Empty>}</div></article>; })}{topology.federations.length === 0 && <Empty>创建第一个 Federation，再把已注册站点加入进来。</Empty>}</div></section>;
 }
 
+function ApplicationSites({ topology, sites }: { topology: Topology; sites: Site[] }) {
+  const federations = new Map(topology.federations.map((item) => [item.federation_id, item.display_name]));
+  const siteDetails = new Map(sites.map((item) => [item.site_id, item]));
+  return <section className="table-wrap"><div className="section-head"><div><p className="eyebrow">应用成员</p><h2>站点</h2></div><span>{topology.memberships.length} 个成员关系</span></div><table><thead><tr><th>站点</th><th>所属联邦域</th><th>节点版本</th><th>连接状态</th><th>权限</th><th>最后出现</th></tr></thead><tbody>{topology.memberships.map((member) => { const site = siteDetails.get(member.site_id); return <tr key={`${member.federation_id}-${member.site_id}`}><td><strong>{member.display_name}</strong><small className="mono">{member.site_id}</small></td><td><strong>{federations.get(member.federation_id) || member.federation_id}</strong><small className="mono">{member.federation_id}</small></td><td className="mono">{site?.node_version || "—"}</td><td><Status value={member.last_seen_at ? "online" : "not-seen"} /></td><td>{[member.can_submit && "上传", member.can_receive && "接收", member.can_execute_task && "执行"].filter(Boolean).join(" / ") || "无"}</td><td>{formatTime(member.last_seen_at)}</td></tr>; })}</tbody></table>{topology.memberships.length === 0 && <Empty>这个应用还没有站点。配置成员后，站点会显示在这里。</Empty>}</section>;
+}
+
+function ActivityTimeline({ items }: { items: Activity[] }) {
+  const milestones = items.filter((item) => item.source === "event" || item.action.startsWith("release.")).slice(0, 50);
+  return <section className="activity-panel"><div className="section-head"><div><p className="eyebrow">联邦过程</p><h2>时间线</h2></div><span>最近 {milestones.length} 个节点</span></div><div className="timeline">{milestones.map((item, index) => <article key={`${item.created_at}-${index}`} className="timeline__item"><time>{formatTime(item.created_at)}</time><span className="timeline__node" /><div><div className="timeline__title"><strong>{activityLabel(item.action)}</strong><Status value={item.result} /></div><p>{[item.site_id, item.federation_id].filter(Boolean).join(" · ") || "应用 Agent"}</p><small className="mono">{item.target_type} · {shortId(item.target_id, 30)}</small></div></article>)}{milestones.length === 0 && <Empty>这个应用还没有联邦活动。</Empty>}</div></section>;
+}
+
+function ActivityLog({ items }: { items: Activity[] }) {
+  return <section className="table-wrap"><div className="section-head"><div><p className="eyebrow">运行记录</p><h2>活动日志</h2></div><span>最近 {items.length} 条</span></div><table><thead><tr><th>时间</th><th>活动</th><th>来源</th><th>联邦域 / 站点</th><th>对象</th><th>结果</th></tr></thead><tbody>{items.map((item, index) => <tr key={`${item.created_at}-${index}`}><td>{formatTime(item.created_at)}</td><td><strong>{activityLabel(item.action)}</strong><small className="mono">{item.action}</small></td><td>{item.source === "event" ? "站点事件" : "平台操作"}</td><td><strong>{item.federation_id || "—"}</strong><small className="mono">{item.site_id || "应用 Agent"}</small></td><td><span>{item.target_type}</span><small className="mono">{shortId(item.target_id, 22)}</small></td><td><Status value={item.result} /></td></tr>)}</tbody></table>{items.length === 0 && <Empty>这个应用还没有活动日志。</Empty>}</section>;
+}
+
 function Artifacts({ submissions }: { submissions: Submission[] }) {
   return <section className="table-wrap"><div className="section-head"><div><p className="eyebrow">Inbound channel</p><h2>工件提交</h2></div><span>{submissions.length} submissions</span></div><table><thead><tr><th>类型</th><th>来源站点</th><th>Digest</th><th>大小</th><th>状态</th><th>接收时间</th></tr></thead><tbody>{submissions.map((item) => <tr key={item.submission_id}><td><strong>{item.type_name}</strong><small>format v{item.format_version}</small></td><td className="mono">{item.site_id}</td><td><code title={item.artifact_digest}>{shortId(item.artifact_digest, 24)}</code></td><td>{formatBytes(item.size_bytes)}</td><td><Status value={item.status} /></td><td>{formatTime(item.created_at)}</td></tr>)}</tbody></table>{submissions.length === 0 && <Empty>当前 Federation 还没有收到工件。站点上传后会显示在这里。</Empty>}</section>;
 }
@@ -478,7 +519,7 @@ function Evaluations({ items }: { items: Submission[] }) {
 
 function Releases({ releases, artifacts, selected, onSelected, onCreate, detail, onOpen, onAction }: { releases: ReleaseSummary[]; artifacts: Submission[]; selected: string[]; onSelected: (ids: string[]) => void; onCreate: () => void; detail: ReleaseDetail | null; onOpen: (id: string) => void; onAction: (action: "stage" | "activate" | "rollback") => void }) {
   const toggle = (digest: string) => onSelected(selected.includes(digest) ? selected.filter((item) => item !== digest) : [...selected, digest]);
-  return <div className="release-layout"><section className="release-compose"><p className="eyebrow">Immutable snapshot</p><h2>创建 Release</h2><p className="hint">选择工件后创建不可变快照。目标是当前拥有 receive 权限的全部成员。</p><div className="artifact-picker">{artifacts.map((item) => <label key={item.artifact_digest}><input type="checkbox" checked={selected.includes(item.artifact_digest)} onChange={() => toggle(item.artifact_digest)} /><span><strong>{item.type_name}</strong><code>{shortId(item.artifact_digest, 22)}</code></span><small>{formatBytes(item.size_bytes)}</small></label>)}{artifacts.length === 0 && <Empty>没有可发布工件。</Empty>}</div><button className="button button--primary" disabled={!selected.length} onClick={onCreate}>创建 Release · {selected.length}</button></section><section className="release-list"><div className="section-head"><div><p className="eyebrow">Outbound channel</p><h2>Release 与 Delivery</h2></div><span>{releases.length} releases</span></div>{releases.map((release) => <article className={`release-card ${detail?.release_id === release.release_id ? "active" : ""}`} key={release.release_id}><button onClick={() => onOpen(release.release_id)}><span><strong className="mono">{shortId(release.release_id, 16)}</strong><small>{formatTime(release.created_at)} · {release.artifact_digests.length} artifacts</small></span><span className="release-counts"><em>{release.pending} pending</em><em>{release.staged} staged</em><em>{release.active} active</em>{release.failed > 0 && <em className="bad">{release.failed} failed</em>}</span></button>{detail?.release_id === release.release_id && <ReleaseDeliveries detail={detail} onAction={onAction} />}</article>)}{releases.length === 0 && <Empty>还没有 Release。选择左侧工件创建第一个快照。</Empty>}</section></div>;
+  return <div className="release-layout"><section className="release-compose"><p className="eyebrow">不可变快照</p><h2>创建版本</h2><p className="hint">选择联邦结果并创建版本，平台会将它分发给当前可接收的站点。</p><div className="artifact-picker">{artifacts.map((item) => <label key={item.artifact_digest}><input type="checkbox" checked={selected.includes(item.artifact_digest)} onChange={() => toggle(item.artifact_digest)} /><span><strong>{item.type_name}</strong><code>{shortId(item.artifact_digest, 22)}</code></span><small>{formatBytes(item.size_bytes)}</small></label>)}{artifacts.length === 0 && <Empty>没有可发布工件。</Empty>}</div><button className="button button--primary" disabled={!selected.length} onClick={onCreate}>创建版本 · {selected.length}</button></section><section className="release-list"><div className="section-head"><div><p className="eyebrow">分发状态</p><h2>版本与站点</h2></div><span>{releases.length} 个版本</span></div>{releases.map((release) => <article className={`release-card ${detail?.release_id === release.release_id ? "active" : ""}`} key={release.release_id}><button onClick={() => onOpen(release.release_id)}><span><strong className="mono">{shortId(release.release_id, 16)}</strong><small>{formatTime(release.created_at)} · {release.artifact_digests.length} 个工件</small></span><span className="release-counts"><em>{release.pending} 待分发</em><em>{release.staged} 已暂存</em><em>{release.active} 已启用</em>{release.failed > 0 && <em className="bad">{release.failed} 失败</em>}</span></button>{detail?.release_id === release.release_id && <ReleaseDeliveries detail={detail} onAction={onAction} />}</article>)}{releases.length === 0 && <Empty>还没有版本。选择左侧联邦结果创建第一个版本。</Empty>}</section></div>;
 }
 
 function ReleaseDeliveries({ detail, onAction }: { detail: ReleaseDetail; onAction: (action: "stage" | "activate" | "rollback") => void }) {

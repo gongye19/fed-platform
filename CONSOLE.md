@@ -38,12 +38,17 @@ Federation Console
 ├─ Applications
 │  └─ Application Detail
 │     ├─ Overview                       Agent、Manifest、联邦拓扑
+│     ├─ Sites                          当前应用的成员站点
+│     ├─ Versions                       联邦版本与各站点分发状态
+│     ├─ Evaluations                    站点联邦前后效果
+│     ├─ Timeline                       联邦过程的可读时间线
+│     ├─ Activity                       当前应用的完整运行日志
 │     ├─ Artifacts                      Submission 与 Artifact
-│     ├─ Releases                       Release、各站点 Delivery
 │     └─ Contract                       Manifest 与声明能力
-├─ Sites                                跨应用站点目录
-└─ Activity                             管理操作、任务失败、投递异常
 ```
+
+左侧“应用”展开已注册应用；选中具体应用后，再展开以上应用级导航。站点和活动不作为平台级入口，
+避免把不同应用的数据混在一起。
 
 v1 不做独立的“插件市场”和“AI Dashboard”。插件配置等插件契约冻结后再进入应用设置；
 概览页解释稳定的平台边界与数据流，不展示虚构 KPI。
@@ -96,7 +101,7 @@ com.acme.research
 │    └─ lab-b             offline  submit / receive                        │
 └──────────────────────────────────────────────────────────────────────────┘
 
-[Topology] [Artifacts] [Releases] [Contract]
+左侧：概览 / 站点 / 版本 / 效果 / 时间线 / 活动日志 / 工件 / 契约
 ```
 
 Overview 先展示一棵真实关系树，而不是地理地图：
@@ -117,7 +122,7 @@ Overview 先展示一棵真实关系树，而不是地理地图：
 按 Federation 展示 Submission。表格只显示 digest、类型、大小、来源、状态和创建时间，
 默认不渲染工件正文。
 
-### Releases
+### Versions
 
 每个 Release 展示不可变版本、包含的 Artifact、目标站点及 Delivery 状态：
 
@@ -159,7 +164,7 @@ pending → staged → active
 
 ## 6. Sites
 
-Sites 是跨应用目录，用于回答“这个站点参与了什么”，但不在站点层 union 数据。
+Sites 位于具体应用下，展示该应用各 Federation 的成员站点，不在站点层 union 数据。
 
 ```text
 SITE             NODE       APPLICATIONS  MEMBERSHIPS  LAST SEEN   ATTENTION
@@ -167,15 +172,14 @@ site-hk-01       online     3             4            24s ago     —
 lab-b            offline    1             1            2h ago      2 pending
 ```
 
-当前 Site List 展示 Federation Node 最近连接时间、应用数、Membership 数和待拉取 Command 数。
-跨应用视图只展示注册和健康信息，不 union 业务数据。
+当前 Site List 展示 Federation Node 版本、最近连接时间、所属 Federation 和成员权限。
 
 ---
 
 ## 7. Activity
 
-Activity 是按时间倒序的统一事件流：Application、Federation、Site、对象类型、动作和结果。
-它合并管理员注册、权限、发布操作与站点 Delivery 事件。
+Activity 是当前应用按时间倒序的事件流：Federation、Site、对象类型、动作和结果。
+时间线过滤出站点事件与发布里程碑；活动日志保留该应用最近 100 条完整操作记录。
 
 不把原始 prompt、工件正文或站点私有数据写入活动流。
 
@@ -191,7 +195,7 @@ GET /admin/v1/apps/{app_id}/topology
 GET /admin/v1/apps/{app_id}/federations/{federation_id}/submissions
 GET /admin/v1/apps/{app_id}/federations/{federation_id}/releases
 GET /admin/v1/sites
-GET /admin/v1/activity
+GET /admin/v1/activity?app_id={app_id}
 ```
 
 后端返回展示所需的计数和 Delivery 状态，前端提供手动刷新；有明确实时需求后再加轮询或 SSE。
