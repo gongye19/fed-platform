@@ -39,7 +39,7 @@ from fedplat.settings import Settings, get_settings
 from fedplat.store import ConflictError, Database, ForbiddenError, NotFoundError
 
 
-app = FastAPI(title="FedAgent Platform", version="0.4.0")
+app = FastAPI(title="FedAgent Platform", version="0.5.0")
 cors_origins = [
     origin.strip()
     for origin in os.environ.get("FEDPLAT_CORS_ORIGINS", "").split(",")
@@ -317,6 +317,19 @@ def list_submissions(
     return {"items": db.list_submissions(app_id, federation_id, limit)}
 
 
+@app.get(
+    "/admin/v1/apps/{app_id}/federations/{federation_id}/evaluations",
+    dependencies=[Depends(require_admin)],
+)
+def list_evaluations(
+    app_id: StableId,
+    federation_id: StableId,
+    db: Annotated[Database, Depends(get_database)],
+    limit: int = Query(default=50, ge=1, le=100),
+) -> dict[str, Any]:
+    return {"items": db.list_evaluations(app_id, federation_id, limit)}
+
+
 @app.post(
     "/admin/v1/apps/{app_id}/federations/{federation_id}/releases",
     status_code=201,
@@ -497,6 +510,7 @@ def submit_artifact(
             federation_id=federation_id,
             site_id=site_id,
             descriptor=descriptor_data,
+            artifact_purpose=policy["purpose"],
             storage_key=storage_key,
             idempotency_key=idempotency_key,
         )

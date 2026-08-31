@@ -29,6 +29,7 @@ class ArtifactTypeSpec(BaseModel):
     type_name: StableId = Field(alias="type")
     format_version: int = Field(ge=1)
     media_type: str = Field(min_length=3, max_length=255)
+    purpose: Literal["contribution", "release", "evaluation"] = "contribution"
     metadata_schema: dict[str, Any] = Field(default_factory=dict)
     schema_digest: Digest | None = None
 

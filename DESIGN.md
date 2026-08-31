@@ -74,7 +74,7 @@ object-store  工件 bytes；有大工件时再接 S3/MinIO
 | `Membership` | 某 Site 是否可参加某 Federation，可提交/接收/执行任务 |
 | `AppFederationAgent` | 每个 Application 一个的逻辑联邦协调者 |
 | `Federation` | 一组站点的独立联邦空间 |
-| `ArtifactType` | 应用自定义的工件类型与 schema/处理器绑定 |
+| `ArtifactType` | 应用自定义的工件类型、purpose、schema 与处理器绑定 |
 | `Artifact` | 不可变、内容寻址的联邦对象；可以是 JSON 或 blob |
 | `Submission` | 站点向 Federation 提交的 Artifact 引用及元数据 |
 | `Task` | Agent/算法请求站点本地执行的受 schema 约束任务 |
@@ -103,6 +103,7 @@ artifact_types:
   - type: com.example.observation
     format_version: 1
     media_type: application/json
+    purpose: contribution # contribution | release | evaluation
     schema_digest: sha256:...
 
 task_types:
@@ -190,7 +191,7 @@ PUT /admin/v1/apps/{app_id}/federations/{federation_id}/plugins
 
 - bytes 按 digest 寻址；上传、下载、stage 前都校验。
 - `base_artifact_id` 可表示 delta/patch 的基线，内核不解释 patch 语义。
-- `metadata` 由 ArtifactType schema 约束，用于兼容性、模型架构、任务范围等标记。
+- `metadata` 由 ArtifactType schema 约束，用于兼容性、模型架构、任务范围和匿名评测摘要等标记。
 - 小 JSON 可 inline；大工件必须存对象存储，消息只传 Descriptor。
 - 工件不可变；修改内容就创建新 artifact_id/digest。
 
@@ -460,7 +461,7 @@ audit_log
 
 ## 10. 安全与隐私
 
-- 原始对话、病历、实验数据和评测样本默认不出站。
+- 原始对话、病历、实验数据、评测样本和样本 ID 默认不出站；`evaluation` Artifact 只上传应用声明的汇总指标。
 - 应用是出站内容的第一责任方；Federation Node 再按 ArtifactType allowlist、schema、大小和策略检查。
 - 每个 Membership 独立控制 `submit / receive / execute_task`。
 - pilot 可用可轮换 API key + TLS；生产可换 mTLS/workload identity，不改 payload schema。

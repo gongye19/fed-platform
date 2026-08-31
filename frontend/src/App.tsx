@@ -48,6 +48,7 @@ type Submission = {
   type_name: string;
   format_version: number;
   media_type: string;
+  purpose: "contribution" | "release" | "evaluation";
   size_bytes: number;
   metadata: Json;
 };
@@ -148,7 +149,7 @@ function shortId(value: string, length = 18) {
 }
 
 function Status({ value }: { value: string }) {
-  const tone = ["failed", "disabled", "offline"].includes(value)
+  const tone = ["failed", "disabled", "offline", "reject"].includes(value)
     ? "bad"
     : ["pending", "running", "staged", "retry"].includes(value)
       ? "waiting"
@@ -353,6 +354,7 @@ function ApplicationDetail({ appId, navigate }: { appId: string; navigate: (path
   const [federationId, setFederationId] = useState("");
   const [tab, setTab] = useState("overview");
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [evaluations, setEvaluations] = useState<Submission[]>([]);
   const [releases, setReleases] = useState<ReleaseSummary[]>([]);
   const [detail, setDetail] = useState<ReleaseDetail | null>(null);
   const [selectedDigests, setSelectedDigests] = useState<string[]>([]);
@@ -374,14 +376,16 @@ function ApplicationDetail({ appId, navigate }: { appId: string; navigate: (path
     } catch (reason) { setError(reason instanceof Error ? reason.message : "应用加载失败"); }
   };
   const loadChannel = async () => {
-    if (!federationId) { setSubmissions([]); setReleases([]); return; }
+    if (!federationId) { setSubmissions([]); setEvaluations([]); setReleases([]); return; }
     try {
       const base = `/admin/v1/apps/${encodeURIComponent(appId)}/federations/${encodeURIComponent(federationId)}`;
-      const [submissionData, releaseData] = await Promise.all([
+      const [submissionData, evaluationData, releaseData] = await Promise.all([
         api<{ items: Submission[] }>(`${base}/submissions?limit=100`),
+        api<{ items: Submission[] }>(`${base}/evaluations?limit=100`),
         api<{ items: ReleaseSummary[] }>(`${base}/releases?limit=100`),
       ]);
       setSubmissions(submissionData.items);
+      setEvaluations(evaluationData.items);
       setReleases(releaseData.items);
       setSelectedDigests((current) => current.filter((digest) => submissionData.items.some((item) => item.artifact_digest === digest)));
       setError("");
@@ -443,10 +447,11 @@ function ApplicationDetail({ appId, navigate }: { appId: string; navigate: (path
     <PageHeader eyebrow="Application / Topology" title={app.display_name} meta={`${app.app_id} · v${app.current_version}`} action={<div className="header-actions"><button className="button button--quiet" onClick={() => setMembershipModal(true)} disabled={!topology.federations.length || !sites.length}>配置成员</button><button className="button button--primary" onClick={() => setFederationModal(true)}>新建 Federation</button></div>} />
     <div className="app-state"><Status value={app.status} /><span>Agent</span><Status value={app.agent_status} /><code>{app.core_plugin_id}</code></div>
     {error && <ErrorMessage error={error} />}{notice && <p className="message message--success" role="status">{notice}<button onClick={() => setNotice("")} aria-label="关闭提示">×</button></p>}
-    <div className="tabs" role="tablist" aria-label="应用详情"><button className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")}>拓扑</button><button className={tab === "artifacts" ? "active" : ""} onClick={() => setTab("artifacts")}>工件</button><button className={tab === "releases" ? "active" : ""} onClick={() => setTab("releases")}>发布</button><button className={tab === "contract" ? "active" : ""} onClick={() => setTab("contract")}>契约</button></div>
+    <div className="tabs" role="tablist" aria-label="应用详情"><button className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")}>拓扑</button><button className={tab === "artifacts" ? "active" : ""} onClick={() => setTab("artifacts")}>工件</button><button className={tab === "evaluations" ? "active" : ""} onClick={() => setTab("evaluations")}>效果</button><button className={tab === "releases" ? "active" : ""} onClick={() => setTab("releases")}>发布</button><button className={tab === "contract" ? "active" : ""} onClick={() => setTab("contract")}>契约</button></div>
     {tab === "overview" && <TopologyView topology={topology} onSelect={(id) => { setFederationId(id); setTab("artifacts"); }} />}
     {tab !== "overview" && tab !== "contract" && <FederationSwitch items={topology.federations} value={federationId} onChange={setFederationId} />}
     {tab === "artifacts" && <Artifacts submissions={submissions} />}
+    {tab === "evaluations" && <Evaluations items={evaluations} />}
     {tab === "releases" && <Releases releases={releases} artifacts={uniqueArtifacts} selected={selectedDigests} onSelected={setSelectedDigests} onCreate={createRelease} detail={detail} onOpen={openRelease} onAction={deliveryAction} />}
     {tab === "contract" && <Contract manifest={app.manifest} />}
     {federationModal && <Modal title="新建 Federation" onClose={() => setFederationModal(false)}><form className="stack" onSubmit={createFederation}><label>Federation ID<input name="federation_id" required pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,127}" placeholder="main" /></label><label>显示名称<input name="display_name" required maxLength={160} placeholder="Main Federation" /></label><div className="dialog__actions"><button type="button" className="button button--quiet" onClick={() => setFederationModal(false)}>取消</button><button className="button button--primary">创建</button></div></form></Modal>}
@@ -466,6 +471,11 @@ function Artifacts({ submissions }: { submissions: Submission[] }) {
   return <section className="table-wrap"><div className="section-head"><div><p className="eyebrow">Inbound channel</p><h2>工件提交</h2></div><span>{submissions.length} submissions</span></div><table><thead><tr><th>类型</th><th>来源站点</th><th>Digest</th><th>大小</th><th>状态</th><th>接收时间</th></tr></thead><tbody>{submissions.map((item) => <tr key={item.submission_id}><td><strong>{item.type_name}</strong><small>format v{item.format_version}</small></td><td className="mono">{item.site_id}</td><td><code title={item.artifact_digest}>{shortId(item.artifact_digest, 24)}</code></td><td>{formatBytes(item.size_bytes)}</td><td><Status value={item.status} /></td><td>{formatTime(item.created_at)}</td></tr>)}</tbody></table>{submissions.length === 0 && <Empty>当前 Federation 还没有收到工件。站点上传后会显示在这里。</Empty>}</section>;
 }
 
+function Evaluations({ items }: { items: Submission[] }) {
+  const percent = (value: unknown) => typeof value === "number" ? `${(value * 100).toFixed(1)}%` : "—";
+  return <section className="table-wrap"><div className="section-head"><div><p className="eyebrow">Local validation</p><h2>站点评测</h2></div><span>{items.length} reports</span></div><table><thead><tr><th>轮次</th><th>站点</th><th>当前版本</th><th>候选版本</th><th>提升 / 退步</th><th>结论</th><th>接收时间</th></tr></thead><tbody>{items.map((item) => { const meta = item.metadata; return <tr key={item.submission_id}><td className="mono">{String(meta.round_id || "—")}</td><td className="mono">{item.site_id}</td><td>{percent(meta.baseline_accuracy)}</td><td>{percent(meta.candidate_accuracy)}</td><td>{String(meta.improved ?? "—")} / {String(meta.regressed ?? "—")}</td><td><Status value={String(meta.decision || "reported")} /></td><td>{formatTime(item.created_at)}</td></tr>; })}</tbody></table>{items.length === 0 && <Empty>还没有站点返回本地评测结果。候选版本暂存后，站点会在这里报告效果。</Empty>}</section>;
+}
+
 function Releases({ releases, artifacts, selected, onSelected, onCreate, detail, onOpen, onAction }: { releases: ReleaseSummary[]; artifacts: Submission[]; selected: string[]; onSelected: (ids: string[]) => void; onCreate: () => void; detail: ReleaseDetail | null; onOpen: (id: string) => void; onAction: (action: "stage" | "activate" | "rollback") => void }) {
   const toggle = (digest: string) => onSelected(selected.includes(digest) ? selected.filter((item) => item !== digest) : [...selected, digest]);
   return <div className="release-layout"><section className="release-compose"><p className="eyebrow">Immutable snapshot</p><h2>创建 Release</h2><p className="hint">选择工件后创建不可变快照。目标是当前拥有 receive 权限的全部成员。</p><div className="artifact-picker">{artifacts.map((item) => <label key={item.artifact_digest}><input type="checkbox" checked={selected.includes(item.artifact_digest)} onChange={() => toggle(item.artifact_digest)} /><span><strong>{item.type_name}</strong><code>{shortId(item.artifact_digest, 22)}</code></span><small>{formatBytes(item.size_bytes)}</small></label>)}{artifacts.length === 0 && <Empty>没有可发布工件。</Empty>}</div><button className="button button--primary" disabled={!selected.length} onClick={onCreate}>创建 Release · {selected.length}</button></section><section className="release-list"><div className="section-head"><div><p className="eyebrow">Outbound channel</p><h2>Release 与 Delivery</h2></div><span>{releases.length} releases</span></div>{releases.map((release) => <article className={`release-card ${detail?.release_id === release.release_id ? "active" : ""}`} key={release.release_id}><button onClick={() => onOpen(release.release_id)}><span><strong className="mono">{shortId(release.release_id, 16)}</strong><small>{formatTime(release.created_at)} · {release.artifact_digests.length} artifacts</small></span><span className="release-counts"><em>{release.pending} pending</em><em>{release.staged} staged</em><em>{release.active} active</em>{release.failed > 0 && <em className="bad">{release.failed} failed</em>}</span></button>{detail?.release_id === release.release_id && <ReleaseDeliveries detail={detail} onAction={onAction} />}</article>)}{releases.length === 0 && <Empty>还没有 Release。选择左侧工件创建第一个快照。</Empty>}</section></div>;
@@ -479,7 +489,7 @@ function ReleaseDeliveries({ detail, onAction }: { detail: ReleaseDetail; onActi
 function Contract({ manifest }: { manifest: Json }) {
   const artifactTypes = Array.isArray(manifest.artifact_types) ? manifest.artifact_types as Json[] : [];
   const taskTypes = Array.isArray(manifest.task_types) ? manifest.task_types as Json[] : [];
-  return <section className="contract"><div><p className="eyebrow">Declared capabilities</p><h2>应用契约</h2><dl><div><dt>Schema</dt><dd className="mono">{String(manifest.schema_version)}</dd></div><div><dt>Adapter</dt><dd className="mono">{String(manifest.adapter_protocol)}</dd></div><div><dt>Artifact types</dt><dd>{artifactTypes.length}</dd></div><div><dt>Task types</dt><dd>{taskTypes.length}</dd></div></dl><h3>Artifact Types</h3>{artifactTypes.map((item) => <div className="type-row" key={String(item.type)}><code>{String(item.type)}</code><span>{String(item.media_type)} · format v{String(item.format_version)}</span></div>)}<h3>Task Types</h3>{taskTypes.map((item) => <div className="type-row" key={String(item.type)}><code>{String(item.type)}</code><span>version {String(item.version)}</span></div>)}{!taskTypes.length && <p className="hint">未声明本地任务类型。</p>}</div><pre>{JSON.stringify(manifest, null, 2)}</pre></section>;
+  return <section className="contract"><div><p className="eyebrow">Declared capabilities</p><h2>应用契约</h2><dl><div><dt>Schema</dt><dd className="mono">{String(manifest.schema_version)}</dd></div><div><dt>Adapter</dt><dd className="mono">{String(manifest.adapter_protocol)}</dd></div><div><dt>Artifact types</dt><dd>{artifactTypes.length}</dd></div><div><dt>Task types</dt><dd>{taskTypes.length}</dd></div></dl><h3>Artifact Types</h3>{artifactTypes.map((item) => <div className="type-row" key={String(item.type)}><code>{String(item.type)}</code><span>{String(item.purpose || "contribution")} · {String(item.media_type)} · format v{String(item.format_version)}</span></div>)}<h3>Task Types</h3>{taskTypes.map((item) => <div className="type-row" key={String(item.type)}><code>{String(item.type)}</code><span>version {String(item.version)}</span></div>)}{!taskTypes.length && <p className="hint">未声明本地任务类型。</p>}</div><pre>{JSON.stringify(manifest, null, 2)}</pre></section>;
 }
 
 export default function App() {

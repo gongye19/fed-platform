@@ -103,6 +103,7 @@ def test_registry_and_artifact_submission(live_stack):
                 "type": "test.observation",
                 "format_version": 1,
                 "media_type": "application/json",
+                "purpose": "evaluation",
                 "metadata_schema": metadata_schema,
             }
         ],
@@ -192,6 +193,12 @@ def test_registry_and_artifact_submission(live_stack):
         f"/admin/v1/apps/{app_id}/federations/main/submissions", headers=admin
     )
     assert len(submissions.json()["items"]) == 1
+    assert submissions.json()["items"][0]["purpose"] == "evaluation"
+    evaluations = client.get(
+        f"/admin/v1/apps/{app_id}/federations/main/evaluations", headers=admin
+    )
+    assert len(evaluations.json()["items"]) == 1
+    assert evaluations.json()["items"][0]["metadata"] == {"kind": "demo"}
 
     release = client.post(
         f"/admin/v1/apps/{app_id}/federations/main/releases",
@@ -261,6 +268,8 @@ def test_registry_and_artifact_submission(live_stack):
 
     job = database.claim_agent_job("integration-worker")
     assert job and job["app_id"] == app_id and job["core_plugin_id"] == "manual-channel"
+    assert job["kind"] == "evaluation.received"
+    assert job["payload"]["artifact_purpose"] == "evaluation"
     result = {
         "new_state": {"handled": 1},
         "intents": [{"kind": "wait", "payload": {}}],

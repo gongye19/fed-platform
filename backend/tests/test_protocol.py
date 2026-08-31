@@ -25,6 +25,11 @@ def test_manifest_derives_and_checks_schema_digest():
         }
     )
     assert manifest.artifact_types[0].schema_digest == json_digest({"type": "object"})
+    assert manifest.artifact_types[0].purpose == "contribution"
+
+    raw_evaluation = manifest.model_dump(by_alias=True, mode="json")
+    raw_evaluation["artifact_types"][0]["purpose"] = "evaluation"
+    assert FedAppManifest.model_validate(raw_evaluation).artifact_types[0].purpose == "evaluation"
 
     raw = manifest.model_dump(by_alias=True, mode="json")
     raw["artifact_types"][0]["schema_digest"] = "sha256:" + "0" * 64

@@ -89,7 +89,7 @@ Application 中重复，但它们在主键、外键、查询和对象存储路�
 | `site_credentials` | token prefix、SHA-256 hash、到期/撤销时间 | 不保存明文 token |
 | `federations` | 应用内 Federation、名称、状态 | `(app_id, federation_id)` 主键 |
 | `memberships` | Site 加入 Federation 及三个权限 | `(app_id, federation_id, site_id)` 主键 |
-| `artifact_types` | 类型、format version、schema、media type | 旧版本不可原地修改 |
+| `artifact_types` | 类型、purpose、format version、schema、media type | 旧版本不可原地修改 |
 | `task_types` | Task 类型和输入/输出 schema | 旧版本不可原地修改 |
 
 ### 联邦通道

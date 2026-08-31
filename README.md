@@ -19,6 +19,7 @@
 - PostgreSQL 编号 migration 与复合隔离约束；
 - Railway/S3-compatible Artifact 存储；
 - Artifact digest、大小、media type 和 metadata schema 校验；
+- Artifact purpose（contribution / release / evaluation）与站点评测结果查询；
 - Submission、Event、AgentJob 同事务写入及幂等；
 - 不可变 Release、站点 Delivery、stage/activate/rollback Command 与 Ack；
 - PostgreSQL `SKIP LOCKED` Agent Worker；
@@ -77,6 +78,7 @@ GET  /admin/v1/activity
 POST /admin/v1/apps/{app_id}/federations
 PUT  /admin/v1/apps/{app_id}/federations/{federation_id}/memberships/{site_id}
 GET  /admin/v1/apps/{app_id}/federations/{federation_id}/submissions
+GET  /admin/v1/apps/{app_id}/federations/{federation_id}/evaluations
 POST /admin/v1/apps/{app_id}/federations/{federation_id}/releases
 GET  /admin/v1/apps/{app_id}/federations/{federation_id}/releases
 GET  /admin/v1/apps/{app_id}/federations/{federation_id}/releases/{release_id}

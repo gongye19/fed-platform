@@ -91,8 +91,9 @@ class Database:
             for item in manifest["artifact_types"]:
                 row = conn.execute(
                     """INSERT INTO artifact_types
-                       (app_id, type_name, format_version, media_type, schema_digest, metadata_schema)
-                       VALUES (%s, %s, %s, %s, %s, %s)
+                       (app_id, type_name, format_version, media_type, purpose,
+                        schema_digest, metadata_schema)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s)
                        ON CONFLICT (app_id, type_name, format_version) DO NOTHING
                        RETURNING type_name""",
                     (
@@ -100,18 +101,20 @@ class Database:
                         item["type"],
                         item["format_version"],
                         item["media_type"],
+                        item["purpose"],
                         item["schema_digest"],
                         Jsonb(item["metadata_schema"]),
                     ),
                 ).fetchone()
                 if not row:
                     current = conn.execute(
-                        """SELECT media_type, schema_digest FROM artifact_types
+                        """SELECT media_type, purpose, schema_digest FROM artifact_types
                            WHERE app_id = %s AND type_name = %s AND format_version = %s""",
                         (app_id, item["type"], item["format_version"]),
                     ).fetchone()
                     if current != {
                         "media_type": item["media_type"],
+                        "purpose": item["purpose"],
                         "schema_digest": item["schema_digest"],
                     }:
                         raise ConflictError("an artifact type version cannot change semantics")
@@ -377,7 +380,7 @@ class Database:
             if not membership or not membership["can_submit"]:
                 raise ForbiddenError("site cannot submit to this federation")
             artifact_type = conn.execute(
-                """SELECT media_type, schema_digest, metadata_schema
+                """SELECT media_type, purpose, schema_digest, metadata_schema
                    FROM artifact_types
                    WHERE app_id = %s AND type_name = %s AND format_version = %s""",
                 (app_id, type_name, format_version),
@@ -393,6 +396,7 @@ class Database:
         federation_id: str,
         site_id: str,
         descriptor: dict[str, Any],
+        artifact_purpose: str,
         storage_key: str,
         idempotency_key: str,
     ) -> tuple[dict[str, Any], bool]:
@@ -463,24 +467,45 @@ class Database:
                     raise ConflictError("idempotency key already belongs to another artifact")
                 return existing, False
 
+            event_type = (
+                "evaluation.received"
+                if artifact_purpose == "evaluation"
+                else "submission.accepted"
+            )
+            event_payload = {
+                "submission_id": str(submission_id),
+                "artifact_digest": descriptor["digest"],
+                "artifact_type": descriptor["type"],
+                "artifact_purpose": artifact_purpose,
+                "artifact_metadata": descriptor["metadata"],
+            }
             conn.execute(
                 """INSERT INTO events
                    (event_id, app_id, federation_id, site_id, event_type,
                     entity_type, entity_id, payload, occurred_at)
-                   VALUES (%s, %s, %s, %s, 'submission.accepted',
+                   VALUES (%s, %s, %s, %s, %s,
                            'submission', %s, %s, now())""",
                 (
-                    uuid.uuid4(), app_id, federation_id, site_id, str(submission_id),
-                    Jsonb({"artifact_digest": descriptor["digest"]}),
+                    uuid.uuid4(),
+                    app_id,
+                    federation_id,
+                    site_id,
+                    event_type,
+                    str(submission_id),
+                    Jsonb(event_payload),
                 ),
             )
             conn.execute(
                 """INSERT INTO agent_jobs
                    (job_id, app_id, federation_id, kind, dedupe_key, payload)
-                   VALUES (%s, %s, %s, 'submission.accepted', %s, %s)""",
+                   VALUES (%s, %s, %s, %s, %s, %s)""",
                 (
-                    uuid.uuid4(), app_id, federation_id, str(submission_id),
-                    Jsonb({"submission_id": str(submission_id)}),
+                    uuid.uuid4(),
+                    app_id,
+                    federation_id,
+                    event_type,
+                    str(submission_id),
+                    Jsonb(event_payload),
                 ),
             )
             return submission, True
@@ -523,12 +548,38 @@ class Database:
         with self.connection() as conn:
             return conn.execute(
                 """SELECT s.submission_id, s.site_id, s.artifact_digest, s.status, s.created_at,
-                          a.type_name, a.format_version, a.media_type, a.size_bytes, a.metadata
+                          a.type_name, a.format_version, a.media_type, a.size_bytes, a.metadata,
+                          at.purpose
                    FROM submissions s
                    JOIN artifacts a
                      ON a.app_id = s.app_id AND a.federation_id = s.federation_id
                     AND a.digest = s.artifact_digest
+                   JOIN artifact_types at
+                     ON at.app_id = a.app_id AND at.type_name = a.type_name
+                    AND at.format_version = a.format_version
                    WHERE s.app_id = %s AND s.federation_id = %s
+                   ORDER BY s.created_at DESC
+                   LIMIT %s""",
+                (app_id, federation_id, limit),
+            ).fetchall()
+
+    def list_evaluations(
+        self, app_id: str, federation_id: str, limit: int
+    ) -> list[dict[str, Any]]:
+        with self.connection() as conn:
+            return conn.execute(
+                """SELECT s.submission_id, s.site_id, s.artifact_digest, s.status,
+                          s.created_at, a.type_name, a.format_version, a.media_type,
+                          a.size_bytes, a.metadata, at.purpose
+                   FROM submissions s
+                   JOIN artifacts a
+                     ON a.app_id = s.app_id AND a.federation_id = s.federation_id
+                    AND a.digest = s.artifact_digest
+                   JOIN artifact_types at
+                     ON at.app_id = a.app_id AND at.type_name = a.type_name
+                    AND at.format_version = a.format_version
+                   WHERE s.app_id = %s AND s.federation_id = %s
+                     AND at.purpose = 'evaluation'
                    ORDER BY s.created_at DESC
                    LIMIT %s""",
                 (app_id, federation_id, limit),
