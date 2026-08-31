@@ -228,17 +228,19 @@ td small { margin-top: 4px; }
 .activity-panel .timeline { padding: 24px 20px 8px; }
 
 .app-state { display: flex; align-items: center; gap: 12px; max-width: 1320px; margin: -14px auto 26px; color: var(--muted); font-size: 12px; }
-.app-state code, .contract code, .type-row code { color: #a78bfa; }
+.app-state code { color: #a78bfa; }
 .app-state code { padding: 3px 7px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; }
 .app-nav { display: flex; gap: 22px; max-width: 1320px; margin: 0 auto 18px; overflow-x: auto; border-bottom: 1px solid var(--line); }
 .app-nav button { position: relative; flex: none; min-height: 42px; padding: 0; color: var(--muted); background: transparent; border: 0; cursor: pointer; transition: color 150ms ease-out; }
 .app-nav button:hover { color: var(--secondary); }
 .app-nav button.active { color: var(--ink); }
 .app-nav button.active::after { position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--accent); content: ""; }
-.federation-switch { display: flex; align-items: center; gap: 12px; max-width: 1320px; margin: 0 auto 12px; }
-.federation-switch > span { color: var(--muted); font: 500 10px/1 "Geist Mono Variable", monospace; letter-spacing: .055em; }
-.federation-switch select { width: auto; min-width: 260px; }
-.federation-switch em { color: var(--amber); font-size: 13px; }
+.overview-sites { margin-top: 12px; }
+.evaluation-result { font-weight: 560; }
+.evaluation-result--up { color: var(--green); }
+.evaluation-result--down { color: var(--red); }
+.evaluation-result--same { color: var(--secondary); }
+.evaluation-result--waiting { color: var(--amber); }
 
 .topology { max-width: 1320px; margin: 0 auto; overflow: hidden; background: var(--surface-1); border: 1px solid var(--line); border-radius: var(--radius-md); }
 .topology__legend { display: flex; justify-content: space-between; padding: 12px 16px; color: var(--muted); background: rgba(255, 255, 255, .018); border-bottom: 1px solid var(--line); font: 500 10px/1.2 "Geist Mono Variable", monospace; letter-spacing: .05em; }
@@ -252,8 +254,7 @@ td small { margin-top: 4px; }
 .topology__branch { position: relative; display: grid; grid-template-columns: 250px 1fr; gap: 28px; padding: 0 0 24px 24px; border-left: 1px solid var(--line-strong); }
 .topology__branch:last-child { border-left-color: transparent; }
 .topology__branch::before { position: absolute; top: 32px; left: 0; width: 24px; height: 1px; background: var(--line-strong); content: ""; }
-.topology__federation { display: grid; align-content: center; min-height: 66px; padding: 11px 14px; color: var(--ink); text-align: left; background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); cursor: pointer; transition: background 150ms ease-out, border-color 150ms ease-out; }
-.topology__federation:hover { background: var(--surface-3); border-color: rgba(94, 106, 210, .55); }
+.topology__federation { display: grid; align-content: center; min-height: 66px; padding: 11px 14px; color: var(--ink); text-align: left; background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); }
 .topology__federation span { color: var(--muted); font: 500 9px/1 "Geist Mono Variable", monospace; letter-spacing: .06em; }
 .topology__federation strong { margin: 7px 0 3px; font-weight: 560; }
 .topology__federation code { color: var(--muted); }
@@ -292,16 +293,6 @@ td small { margin-top: 4px; }
 .delivery-grid > div > span { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .delivery-grid time { color: var(--muted); font: 10px/1 "Geist Mono Variable", monospace; }
 .error-text { color: var(--red); }
-
-.contract { display: grid; grid-template-columns: minmax(300px, .8fr) minmax(400px, 1.2fr); gap: 12px; max-width: 1320px; margin: 0 auto; }
-.contract > div, .contract pre { margin: 0; padding: 22px; background: var(--surface-1); border: 1px solid var(--line); border-radius: var(--radius-md); }
-.contract dl { display: grid; grid-template-columns: 1fr 1fr; margin: 20px 0 0; }
-.contract dl > div { padding: 11px 0; border-top: 1px solid var(--line); }
-.contract dt { color: var(--muted); font-size: 11px; }
-.contract dd { margin: 5px 0 0; }
-.contract pre { max-height: 680px; overflow: auto; color: #cbd0d8; background: #101116; line-height: 1.55; white-space: pre-wrap; }
-.type-row { display: flex; justify-content: space-between; gap: 20px; padding: 10px 0; border-top: 1px solid var(--line); }
-.type-row span { color: var(--muted); font-size: 12px; }
 
 .dialog { width: min(680px, calc(100vw - 28px)); max-height: calc(100vh - 40px); padding: 0; color: var(--ink); background: var(--surface-1); border: 1px solid var(--line-strong); border-radius: var(--radius-md); box-shadow: 0 24px 80px rgba(0, 0, 0, .55); }
 .dialog::backdrop { background: rgba(3, 4, 5, .72); backdrop-filter: blur(4px); }
@@ -401,8 +392,6 @@ td small { margin-top: 4px; }
   .release-card > button { align-items: flex-start; flex-direction: column; }
   .release-counts { justify-content: flex-start; }
   .delivery-grid > div { grid-template-columns: 1fr; }
-  .federation-switch { align-items: flex-start; flex-direction: column; }
-  .federation-switch select { width: 100%; min-width: 0; }
   .timeline__item { grid-template-columns: 16px 1fr; }
   .timeline__item time { grid-column: 2; grid-row: 1; }
   .timeline__node { grid-column: 1; grid-row: 1 / span 2; }

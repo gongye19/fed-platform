@@ -37,14 +37,11 @@ Federation Console
 ├─ Platform Overview                    默认首页；平台架构与端到端联邦流程
 ├─ Applications
 │  └─ Application Detail
-│     ├─ Overview                       Agent、Manifest、联邦拓扑
-│     ├─ Sites                          当前应用的成员站点
+│     ├─ Overview                       Agent、联邦拓扑与成员站点
 │     ├─ Versions                       联邦版本与各站点分发状态
-│     ├─ Evaluations                    站点联邦前后效果
+│     ├─ Evaluations                    每轮各站点的联邦前后效果
 │     ├─ Timeline                       联邦过程的可读时间线
-│     ├─ Activity                       当前应用的完整运行日志
-│     ├─ Artifacts                      Submission 与 Artifact
-│     └─ Contract                       Manifest 与声明能力
+│     └─ Logs                           平台活动与站点上传日志
 ```
 
 左侧“应用”只展开已注册应用，不再嵌套功能菜单；选中具体应用后，以上应用级导航显示在内容区顶部。
@@ -101,7 +98,7 @@ com.acme.research
 │    └─ lab-b             offline  submit / receive                        │
 └──────────────────────────────────────────────────────────────────────────┘
 
-内容区横向菜单：概览 / 站点 / 版本 / 效果 / 时间线 / 活动日志 / 工件 / 契约
+内容区横向菜单：概览 / 版本 / 效果 / 时间线 / 日志
 ```
 
 Overview 先展示一棵真实关系树，而不是地理地图：
@@ -115,12 +112,11 @@ Overview 先展示一棵真实关系树，而不是地理地图：
 
 - Federation 拓扑和成员权限；
 - Agent Core 与运行状态；
-- Federation/Site 关系和 submit/receive/execute 权限。
+- Federation/Site 关系、节点版本、连接状态和 submit/receive/execute 权限。
 
-### Artifacts
+### Logs
 
-按 Federation 展示 Submission。表格只显示 digest、类型、大小、来源、状态和创建时间，
-默认不渲染工件正文。
+合并平台操作、站点事件和 Artifact 上传记录，按时间倒序展示；不渲染工件正文。
 
 ### Versions
 
@@ -134,15 +130,6 @@ pending → staged → active
 
 管理员可在此创建 manual release、stage、activate 和 rollback。破坏性或批量动作先展示目标站点，
 要求二次确认，并显示操作结果。
-
-### Contract
-
-- 当前 FedApp Manifest；
-- Adapter protocol；
-- ArtifactType 与 TaskType 声明；
-- 原始只读 JSON。
-
-插件配置 UI 暂不生成；等第一个真实插件确定 schema 后再加入，不提前设计一套空表单框架。
 
 ---
 
@@ -162,7 +149,7 @@ pending → staged → active
 
 ---
 
-## 6. Sites
+## 6. Sites（概览内）
 
 Sites 位于具体应用下，展示该应用各 Federation 的成员站点，不在站点层 union 数据。
 
@@ -176,10 +163,10 @@ lab-b            offline    1             1            2h ago      2 pending
 
 ---
 
-## 7. Activity
+## 7. Logs
 
-Activity 是当前应用按时间倒序的事件流：Federation、Site、对象类型、动作和结果。
-时间线过滤出站点事件与发布里程碑；活动日志保留该应用最近 100 条完整操作记录。
+Logs 是当前应用按时间倒序的事件流：Federation、Site、对象类型、动作和结果。
+时间线过滤出站点事件与发布里程碑；日志保留该应用最近 100 条平台操作和站点上传记录。
 
 不把原始 prompt、工件正文或站点私有数据写入活动流。
 
@@ -233,12 +220,11 @@ v1 管理通道交付以下视图：
 
 1. Platform Overview；
 2. Application List；
-3. Application Overview；
-4. Application Artifacts；
-5. Application Releases；
-6. Application Contract；
-7. Site List；
-8. Activity。
+3. Application Overview（含站点）；
+4. Application Versions；
+5. Application Evaluations；
+6. Application Timeline；
+7. Application Logs（含上传记录）。
 
 注册应用、建 Federation、添加 Site/Membership、手工 Release 和 rollback 使用同页表单或对话框，
 不为每个动作单建页面。

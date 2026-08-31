@@ -27,7 +27,7 @@
 - 新应用默认绑定 DeepSeek Harness Agent Core，配置与平台 memory 均带 revision；
 - Harness 使用无 shell、无文件系统、无 skill/job 工具的 Cordis 组合，只能返回受校验意图；
 - Application、拓扑、工件、发布、站点和应用级活动管理 API；
-- 可独立部署的 React 管理控制台，左侧按应用展开站点、版本、效果、时间线和活动日志。
+- 可独立部署的 React 管理控制台，应用内横向展示概览、版本、效果、时间线和日志。
 
 旧 SQLite `Update / Digest / Plugin` spike 已删除，不提供兼容接口。DeepSeek Harness Agent Core 与 `manual-channel` 回退已实现；Fed-EvoMed 已用外部协调器验证算法通道，通用插件执行器仍保留协议位置。
 
