@@ -180,10 +180,18 @@ function activityLabel(action: string) {
   } as Record<string, string>)[action] || action;
 }
 
+function activityTargetLabel(target: string) {
+  return ({ agent_job: "Agent 任务", submission: "站点上传", delivery: "站点分发", release: "联邦版本" } as Record<string, string>)[target] || target;
+}
+
+function resultLabel(result: string) {
+  return ({ success: "成功", failed: "失败", pending: "等待" } as Record<string, string>)[result] || result;
+}
+
 function Status({ value }: { value: string }) {
-  const tone = ["failed", "disabled", "offline", "reject"].includes(value)
+  const tone = ["failed", "disabled", "offline", "reject", "失败", "下降"].includes(value)
     ? "bad"
-    : ["pending", "running", "staged", "retry"].includes(value)
+    : ["pending", "running", "staged", "retry", "等待"].includes(value)
       ? "waiting"
       : "ok";
   return <span className={`status status--${tone}`}><span aria-hidden="true" />{value}</span>;
@@ -488,11 +496,11 @@ function ApplicationSites({ topology, sites }: { topology: Topology; sites: Site
 
 function ActivityTimeline({ items }: { items: Activity[] }) {
   const milestones = items.filter((item) => item.source === "event" || item.action.startsWith("release.")).slice(0, 50);
-  return <section className="activity-panel"><div className="section-head"><div><p className="eyebrow">联邦过程</p><h2>时间线</h2></div><span>最近 {milestones.length} 个节点</span></div><div className="timeline">{milestones.map((item, index) => <article key={`${item.created_at}-${index}`} className="timeline__item"><time>{formatTime(item.created_at)}</time><span className="timeline__node" /><div><div className="timeline__title"><strong>{activityLabel(item.action)}</strong><Status value={item.result} /></div><p>{[item.site_id, item.federation_id].filter(Boolean).join(" · ") || "应用 Agent"}</p><small className="mono">{item.target_type} · {shortId(item.target_id, 30)}</small></div></article>)}{milestones.length === 0 && <Empty>这个应用还没有联邦活动。</Empty>}</div></section>;
+  return <section className="activity-panel"><div className="section-head"><div><p className="eyebrow">联邦过程</p><h2>时间线</h2></div><span>最近 {milestones.length} 个节点</span></div><div className="timeline">{milestones.map((item, index) => <article key={`${item.created_at}-${index}`} className="timeline__item"><time>{formatTime(item.created_at)}</time><span className="timeline__node" /><div><div className="timeline__title"><strong>{activityLabel(item.action)}</strong><Status value={resultLabel(item.result)} /></div><p>{[item.site_id, item.federation_id].filter(Boolean).join(" · ") || "应用 Agent"}</p><small className="mono">{activityTargetLabel(item.target_type)} · {shortId(item.target_id, 30)}</small></div></article>)}{milestones.length === 0 && <Empty>这个应用还没有联邦活动。</Empty>}</div></section>;
 }
 
 function ActivityLog({ items }: { items: Activity[] }) {
-  return <section className="table-wrap"><div className="section-head"><div><p className="eyebrow">运行记录</p><h2>日志</h2></div><span>最近 {items.length} 条</span></div><table><thead><tr><th>时间</th><th>活动</th><th>来源</th><th>联邦域 / 站点</th><th>对象</th><th>结果</th></tr></thead><tbody>{items.map((item, index) => <tr key={`${item.created_at}-${index}`}><td>{formatTime(item.created_at)}</td><td><strong>{activityLabel(item.action)}</strong><small className="mono">{item.action}</small></td><td>{item.source === "event" ? "站点上传" : "平台操作"}</td><td><strong>{item.federation_id || "—"}</strong><small className="mono">{item.site_id || "应用 Agent"}</small></td><td><span>{item.target_type}</span><small className="mono">{shortId(item.target_id, 22)}</small></td><td><Status value={item.result} /></td></tr>)}</tbody></table>{items.length === 0 && <Empty>这个应用还没有日志。</Empty>}</section>;
+  return <section className="table-wrap"><div className="section-head"><div><p className="eyebrow">运行记录</p><h2>日志</h2></div><span>最近 {items.length} 条</span></div><table><thead><tr><th>时间</th><th>活动</th><th>来源</th><th>联邦域 / 站点</th><th>对象</th><th>结果</th></tr></thead><tbody>{items.map((item, index) => <tr key={`${item.created_at}-${index}`}><td>{formatTime(item.created_at)}</td><td><strong>{activityLabel(item.action)}</strong></td><td>{item.source === "event" ? "站点事件" : "平台操作"}</td><td><strong>{item.federation_id || "—"}</strong><small className="mono">{item.site_id || "应用 Agent"}</small></td><td><span>{activityTargetLabel(item.target_type)}</span><small className="mono">{shortId(item.target_id, 22)}</small></td><td><Status value={resultLabel(item.result)} /></td></tr>)}</tbody></table>{items.length === 0 && <Empty>这个应用还没有日志。</Empty>}</section>;
 }
 
 function Evaluations({ items }: { items: Submission[] }) {
