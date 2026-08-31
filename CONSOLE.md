@@ -90,7 +90,7 @@ SITE             APPLICATION VERSION  STATUS    LAST UPLOAD
 site-hk-01       1.4.0                online    24s ago
 site-sg-01       1.3.2                online    2m ago
 
-内容区横向菜单：概览 / 版本 / 效果 / 时间线 / 日志
+内容区横向菜单：概览 / 版本管理 / 效果 / 时间线 / 日志
 ```
 
 ### Overview

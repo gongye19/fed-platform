@@ -88,7 +88,7 @@ type Activity = {
 
 const APP_SECTIONS = [
   ["overview", "概览"],
-  ["versions", "版本"],
+  ["versions", "版本管理"],
   ["evaluations", "效果"],
   ["timeline", "时间线"],
   ["logs", "日志"],
