@@ -192,7 +192,8 @@ PUT /admin/v1/apps/{app_id}/federations/{federation_id}/plugins
 
 ```text
 POST /site/v1/apps/{app_id}/artifacts
-    使用应用专属 Key 上传工件；必须带 Idempotency-Key 与 X-App-Version
+    使用应用专属 Key 上传工件；必须带 Idempotency-Key、X-App-Version
+    与 X-Federation-Version（Release ID，未使用任何版本时为 none）
 
 GET /site/v1/apps/{app_id}/commands?after=<cursor>&limit=<n>
     站点长轮询下行 Command/Release
@@ -252,7 +253,7 @@ POST /local/v1/events:batch
 Federation Node 写本地 outbox
   ↓ 上传 bytes，获得/confirm Descriptor
   ↓ 发 submission.created
-Control API 校验应用 Key、X-App-Version、schema、digest 与幂等键
+Control API 校验应用 Key、X-App-Version、X-Federation-Version、schema、digest 与幂等键
   ↓ 首次成功上传时自动创建 Site / Membership
   ↓
 PostgreSQL 写 Submission/Event，Object Store 保存 bytes
@@ -286,13 +287,13 @@ Agent 或管理员提议 Release
 Federation Node 下载并校验 Artifact
   ↓ 应用 stage：检查自己能否使用
   ↓ release.staged/rejected
-  ↓ release.activate
-应用原子切换 active artifact reference
-  ↓ release.applied
-应用可继续上报 outcome.reported
+站点自行决定是否启用
+  ↓ 应用原子切换 active artifact reference
+下一次上传用 X-Federation-Version 上报实际使用版本
 ```
 
-`stage` 不立即生效。应用必须保留上一个已知可用 Release，以支持 rollback。平台不解释“怎么用这个 Artifact”；语义由应用的 stage/activate 实现和 Artifact Handler 共同定义。
+`stage` 不立即生效，下发状态也不能推断站点正在使用该版本。应用必须保留上一个已知可用 Release，
+以支持 rollback。平台不解释“怎么用这个 Artifact”；语义由应用自己的启用逻辑和 Artifact Handler 定义。
 
 ---
 

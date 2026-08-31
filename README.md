@@ -17,7 +17,7 @@
 - FedApp Manifest、Application、AppFederationAgent 注册；
 - 每个 Application 自动创建一个 Federation；
 - Application-scoped Site API Key 与首次成功上传自动入域；
-- 站点上传必带应用版本，平台保存各站点当前部署版本；
+- 站点上传必带应用版本和实际使用的联邦版本，平台分别保存；
 - PostgreSQL 编号 migration 与复合隔离约束；
 - Railway/S3-compatible Artifact 存储；
 - Artifact digest、大小、media type 和 metadata schema 校验；
@@ -83,11 +83,12 @@ GET  /admin/v1/apps/{app_id}/federations/{federation_id}/evaluations
 POST /admin/v1/apps/{app_id}/federations/{federation_id}/artifacts
 GET  /admin/v1/apps/{app_id}/federations/{federation_id}/artifacts/{digest}
 POST /admin/v1/apps/{app_id}/federations/{federation_id}/releases
+POST /admin/v1/apps/{app_id}/federations/{federation_id}/releases/generate
 GET  /admin/v1/apps/{app_id}/federations/{federation_id}/releases
 GET  /admin/v1/apps/{app_id}/federations/{federation_id}/releases/{release_id}
 POST /admin/v1/apps/{app_id}/federations/{federation_id}/releases/{release_id}/{stage|activate|rollback}
 
-POST /site/v1/apps/{app_id}/artifacts  # Authorization + Idempotency-Key + X-App-Version
+POST /site/v1/apps/{app_id}/artifacts  # Authorization + Idempotency-Key + X-App-Version + X-Federation-Version
 GET  /site/v1/apps/{app_id}/commands
 POST /site/v1/apps/{app_id}/commands/{command_id}/ack
 ```

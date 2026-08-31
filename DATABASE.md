@@ -88,7 +88,7 @@ Application 中重复，但它们在主键、外键、查询和对象存储路�
 | `sites` | 首次上传后出现的全局 Site、last_seen_at、状态 | `site_id` 主键 |
 | `app_site_credentials` | app/site 绑定、token prefix、SHA-256 hash、到期/撤销时间 | 不保存明文 token |
 | `federations` | 应用唯一 Federation、名称、状态 | 每个 app 只有一个 active 行 |
-| `memberships` | Site 加入域、部署的 app_version、last_seen_at | `(app_id, federation_id, site_id)` 主键 |
+| `memberships` | Site 加入域、部署的 app_version、实际上报的 Release、last_seen_at | `(app_id, federation_id, site_id)` 主键 |
 | `artifact_types` | 类型、purpose、format version、schema、media type | 旧版本不可原地修改 |
 | `task_types` | Task 类型和输入/输出 schema | 旧版本不可原地修改 |
 
@@ -191,7 +191,7 @@ v1 只在同一个 `(app_id, federation_id)` 内去重，不做跨 Application �
 上传过程：
 
 ```text
-1. API 用应用站点 Key 得到 app/site，校验 `X-App-Version` 与 ArtifactType，并解析应用唯一 Federation
+1. API 用应用站点 Key 得到 app/site，校验 `X-App-Version`、`X-Federation-Version` 与 ArtifactType，并解析应用唯一 Federation
 2. 流式写入临时对象，同时计算 SHA-256 和大小，不把整个文件读进内存
 3. digest/大小/schema 校验失败：删除临时对象，返回错误
 4. 将对象写到最终 digest key；已有相同对象则复用

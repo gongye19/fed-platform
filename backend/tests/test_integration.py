@@ -174,6 +174,7 @@ def test_registry_and_artifact_submission(live_stack):
             **site_auth,
             "Idempotency-Key": "wrong-app",
             "X-App-Version": "1.0.0",
+            "X-Federation-Version": "none",
         },
     )
     assert cross_app.status_code == 401
@@ -186,12 +187,13 @@ def test_registry_and_artifact_submission(live_stack):
             **site_auth,
             "Idempotency-Key": "bad-version",
             "X-App-Version": "9.9.9",
+            "X-Federation-Version": "none",
         },
     )
     assert unregistered_version.status_code == 409
     assert client.get("/admin/v1/sites", headers=admin).json()["items"] == []
 
-    def upload(idempotency_key: str):
+    def upload(idempotency_key: str, federation_version: str = "none"):
         return client.post(
             f"/site/v1/apps/{app_id}/artifacts",
             data={"descriptor": json.dumps(descriptor)},
@@ -200,6 +202,7 @@ def test_registry_and_artifact_submission(live_stack):
                 **site_auth,
                 "Idempotency-Key": idempotency_key,
                 "X-App-Version": "1.0.0",
+                "X-Federation-Version": federation_version,
             },
         )
 
@@ -214,6 +217,8 @@ def test_registry_and_artifact_submission(live_stack):
     assert topology.json()["memberships"][0]["site_id"] == site_id
     assert topology.json()["memberships"][0]["app_version"] == "1.0.0"
     assert topology.json()["memberships"][0]["last_seen_at"]
+    assert topology.json()["memberships"][0]["reported_release_id"] is None
+    assert topology.json()["memberships"][0]["federation_version_reported_at"]
 
     submissions = client.get(
         f"/admin/v1/apps/{app_id}/federations/default/submissions", headers=admin
@@ -258,12 +263,15 @@ def test_registry_and_artifact_submission(live_stack):
     assert artifact.json()["download_url"].startswith("http")
 
     release = client.post(
-        f"/admin/v1/apps/{app_id}/federations/default/releases",
-        json={"artifact_digests": [release_digest]},
+        f"/admin/v1/apps/{app_id}/federations/default/releases/generate",
         headers=admin,
     )
     assert release.status_code == 201
     release_id = release.json()["release_id"]
+    assert client.post(
+        f"/admin/v1/apps/{app_id}/federations/default/releases/generate",
+        headers=admin,
+    ).status_code == 409
     stage = client.post(
         f"/admin/v1/apps/{app_id}/federations/default/releases/{release_id}/stage",
         json={},
@@ -306,6 +314,12 @@ def test_registry_and_artifact_submission(live_stack):
         headers=site_auth,
     ).json()["delivery_state"] == "active"
 
+    reported = upload("reported-version", release_id)
+    assert reported.status_code == 201
+    topology = client.get(f"/admin/v1/apps/{app_id}/topology", headers=admin).json()
+    assert topology["memberships"][0]["reported_release_id"] == release_id
+    assert topology["memberships"][0]["federation_version_reported_at"]
+
     rollback = client.post(
         f"/admin/v1/apps/{app_id}/federations/default/releases/{release_id}/rollback",
         json={},
@@ -347,8 +361,10 @@ def test_registry_and_artifact_submission(live_stack):
         expected_state_revision=job["state_revision"],
     )
     with database.connection() as conn:
-        assert conn.execute("SELECT count(*) AS n FROM events").fetchone()["n"] == 5
-        stored_job = conn.execute("SELECT status, result FROM agent_jobs").fetchone()
+        assert conn.execute("SELECT count(*) AS n FROM events").fetchone()["n"] == 6
+        stored_job = conn.execute(
+            "SELECT status, result FROM agent_jobs WHERE job_id = %s", (job["job_id"],)
+        ).fetchone()
         assert stored_job == {"status": "succeeded", "result": result}
         stored_agent = conn.execute(
             "SELECT state, state_revision FROM app_agents WHERE app_id = %s", (app_id,)

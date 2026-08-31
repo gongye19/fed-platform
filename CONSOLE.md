@@ -105,7 +105,8 @@ site-sg-01       1.3.2                online    2m ago
 
 ### Versions
 
-只展示联邦域当前分发的最新不可变 Release，以及各目标站点的 Delivery 状态：
+版本页是版本管理工作台：左侧逐站点显示本轮是否有新提交并触发联邦生成，右侧选择不可变
+Release 下发，下方显示站点实际上报的当前使用版本。
 
 ```text
 pending → staged → active
@@ -113,7 +114,8 @@ pending → staged → active
 任意阶段可进入 failed，重试生成新的操作记录，不覆盖历史。
 ```
 
-版本页是只读状态页；Release 和下发动作由应用 Agent/算法通道产生，不在这里手工创建。
+“下发”只创建 `release.stage` 命令，不代表站点启用。站点是否使用由站点自己决定，平台只把它
+下一次上传携带的 `X-Federation-Version` 作为当前使用版本。
 
 ---
 

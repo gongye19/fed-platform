@@ -49,7 +49,13 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_methods=["GET", "POST", "PUT", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-App-Version"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "Idempotency-Key",
+        "X-App-Version",
+        "X-Federation-Version",
+    ],
 )
 
 
@@ -441,6 +447,23 @@ def create_release(
         map_store_error(exc)
 
 
+@app.post(
+    "/admin/v1/apps/{app_id}/federations/{federation_id}/releases/generate",
+    status_code=201,
+    dependencies=[Depends(require_admin)],
+)
+def generate_release(
+    app_id: StableId,
+    federation_id: StableId,
+    db: Annotated[Database, Depends(get_database)],
+) -> dict[str, Any]:
+    try:
+        digest = db.next_unreleased_release_artifact(app_id, federation_id)
+        return db.create_release(app_id, federation_id, [digest], [])
+    except (ConflictError, NotFoundError, ForbiddenError) as exc:
+        map_store_error(exc)
+
+
 @app.get(
     "/admin/v1/apps/{app_id}/federations/{federation_id}/releases",
     dependencies=[Depends(require_admin)],
@@ -547,6 +570,10 @@ def submit_artifact(
         Header(alias="Idempotency-Key", min_length=1, max_length=160),
     ],
     app_version: Annotated[Version, Header(alias="X-App-Version")],
+    federation_version: Annotated[
+        str,
+        Header(alias="X-Federation-Version", min_length=1, max_length=64),
+    ],
     site: Annotated[dict[str, str], Depends(authenticate_app_site)],
     settings: Annotated[Settings, Depends(get_settings)],
     db: Annotated[Database, Depends(get_database)],
@@ -558,8 +585,19 @@ def submit_artifact(
         fail(400, "E_BAD_DESCRIPTOR", str(exc))
 
     try:
+        reported_release_id = (
+            None if federation_version == "none" else uuid.UUID(federation_version)
+        )
+    except ValueError:
+        fail(400, "E_BAD_FEDERATION_VERSION", "X-Federation-Version must be a release ID or 'none'")
+
+    try:
         policy = db.submission_policy(
-            app_id, app_version, descriptor.type_name, descriptor.format_version
+            app_id,
+            app_version,
+            descriptor.type_name,
+            descriptor.format_version,
+            reported_release_id,
         )
     except (ConflictError, NotFoundError, ForbiddenError) as exc:
         map_store_error(exc)
@@ -583,6 +621,7 @@ def submit_artifact(
             site_id=site["site_id"],
             display_name=site["display_name"],
             app_version=app_version,
+            reported_release_id=reported_release_id,
             descriptor=descriptor_data,
             artifact_purpose=policy["purpose"],
             storage_key=storage_key,
