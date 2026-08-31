@@ -15,7 +15,9 @@
 正式 v1 的管理与发布通道已经实现：
 
 - FedApp Manifest、Application、AppFederationAgent 注册；
-- Site、Federation、Membership 和 Bearer credential；
+- 每个 Application 自动创建一个 Federation；
+- Application-scoped Site API Key 与首次成功上传自动入域；
+- 站点上传必带应用版本，平台保存各站点当前部署版本；
 - PostgreSQL 编号 migration 与复合隔离约束；
 - Railway/S3-compatible Artifact 存储；
 - Artifact digest、大小、media type 和 metadata schema 校验；
@@ -73,11 +75,9 @@ GET  /admin/v1/apps
 GET  /admin/v1/apps/{app_id}/agent
 PUT  /admin/v1/apps/{app_id}/agent
 GET  /admin/v1/apps/{app_id}/topology
-POST /admin/v1/sites
 GET  /admin/v1/sites
 GET  /admin/v1/activity
-POST /admin/v1/apps/{app_id}/federations
-PUT  /admin/v1/apps/{app_id}/federations/{federation_id}/memberships/{site_id}
+POST /admin/v1/apps/{app_id}/site-keys
 GET  /admin/v1/apps/{app_id}/federations/{federation_id}/submissions
 GET  /admin/v1/apps/{app_id}/federations/{federation_id}/evaluations
 POST /admin/v1/apps/{app_id}/federations/{federation_id}/artifacts
@@ -87,7 +87,7 @@ GET  /admin/v1/apps/{app_id}/federations/{federation_id}/releases
 GET  /admin/v1/apps/{app_id}/federations/{federation_id}/releases/{release_id}
 POST /admin/v1/apps/{app_id}/federations/{federation_id}/releases/{release_id}/{stage|activate|rollback}
 
-POST /site/v1/apps/{app_id}/federations/{federation_id}/artifacts
-GET  /site/v1/commands
-POST /site/v1/commands/{command_id}/ack
+POST /site/v1/apps/{app_id}/artifacts  # Authorization + Idempotency-Key + X-App-Version
+GET  /site/v1/apps/{app_id}/commands
+POST /site/v1/apps/{app_id}/commands/{command_id}/ack
 ```

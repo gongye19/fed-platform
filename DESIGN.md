@@ -11,12 +11,11 @@
 FedAgent Platform
 ├─ Application A
 │  ├─ App Federation Agent A       应用级联邦协调者
-│  ├─ Federation main             站点 1 / 2 / 3
-│  └─ Federation private-group    站点 4 / 5
+│  └─ Federation A                站点 1 / 2 / 3
 │
 └─ Application B
    ├─ App Federation Agent B
-   └─ Federation main             站点 2 / 6 / 7
+   └─ Federation B                站点 4 / 5 / 6
 ```
 
 固定规则：
@@ -25,7 +24,7 @@ FedAgent Platform
 2. `AppFederationAgent` 只能看到本应用的站点、工件、任务和发布。
 3. 真正的隔离/聚合 key 是 `(app_id, federation_id)`。
 4. 不同应用的内容永远不 union。
-5. 同一应用可以有多个 Federation，以支持不同站点组或不同联邦目标。
+5. 每个应用固定一个 Federation；应用之间天然隔离，域不由管理员手工新建。
 6. Agent 是逻辑 actor，不是每个应用常驻一个容器；Worker 按 `app_id` 加载它的状态和插件配置执行。
 
 ---
@@ -71,7 +70,7 @@ object-store  工件 bytes；有大工件时再接 S3/MinIO
 |---|---|
 | `Application` | 一个按 FedApp 协议开发的产品 |
 | `Site` | 一个部署站点/机构 |
-| `Membership` | 某 Site 是否可参加某 Federation，可提交/接收/执行任务 |
+| `Membership` | Site 首次成功上传后自动形成的应用域成员关系 |
 | `AppFederationAgent` | 每个 Application 一个的逻辑联邦协调者 |
 | `Federation` | 一组站点的独立联邦空间 |
 | `ArtifactType` | 应用自定义的工件类型、purpose、schema 与处理器绑定 |
@@ -122,18 +121,12 @@ POST /admin/v1/apps
     验证 Manifest
     创建 Application namespace
     创建 AppFederationAgent
+    创建唯一 Federation
     绑定受限 DeepSeek Harness Agent Core
 
-POST /admin/v1/apps/{app_id}/federations
-    创建 federation_id
-    选择成员站点与参与权限
-
-POST /admin/v1/sites
-    注册全局 Site
-    签发可轮换站点凭据
-
-PUT /admin/v1/apps/{app_id}/federations/{federation_id}/memberships/{site_id}
-    创建或更新 Membership 与 submit/receive/execute_task 权限
+POST /admin/v1/apps/{app_id}/site-keys
+    为一个部署站点签发绑定 app_id + site_id 的可轮换凭据
+    此时不创建 Site；首次成功上传时自动创建 Site 与 Membership
 
 PUT /admin/v1/apps/{app_id}/agent
     更新 Agent Core 插件与配置 revision
@@ -198,17 +191,14 @@ PUT /admin/v1/apps/{app_id}/federations/{federation_id}/plugins
 ### 5.3 Site 端 API
 
 ```text
-POST /site/v1/artifacts
-    上传小工件或初始化大工件上传
+POST /site/v1/apps/{app_id}/artifacts
+    使用应用专属 Key 上传工件；必须带 Idempotency-Key 与 X-App-Version
 
-GET /site/v1/artifacts/{digest}
-    下载站点被授权的工件
-
-POST /site/v1/events:batch
-    上行 Event，包括 Submission、Task Result、Delivery Ack、Outcome
-
-GET /site/v1/commands?after=<cursor>&limit=<n>
+GET /site/v1/apps/{app_id}/commands?after=<cursor>&limit=<n>
     站点长轮询下行 Command/Release
+
+POST /site/v1/apps/{app_id}/commands/{command_id}/ack
+    确认本应用的下行命令
 ```
 
 所有站点连接均为主动出站 HTTPS；中心不需要连入站点网络。Command 带单调 cursor、command_id、过期时间和可选 lease。
@@ -262,7 +252,8 @@ POST /local/v1/events:batch
 Federation Node 写本地 outbox
   ↓ 上传 bytes，获得/confirm Descriptor
   ↓ 发 submission.created
-Control API 鉴权 + schema + membership + 幂等检查
+Control API 校验应用 Key、X-App-Version、schema、digest 与幂等键
+  ↓ 首次成功上传时自动创建 Site / Membership
   ↓
 PostgreSQL 写 Submission/Event，Object Store 保存 bytes
   ↓
@@ -419,7 +410,7 @@ v1 实现 `deepseek-harness` Agent Core 与 `manual-channel` 回退；Harness �
 applications
 application_versions
 sites
-site_credentials
+app_site_credentials
 memberships
 app_agents
 federations
@@ -463,9 +454,9 @@ audit_log
 
 - 原始对话、病历、实验数据、评测样本和样本 ID 默认不出站；`evaluation` Artifact 只上传应用声明的汇总指标。
 - 应用是出站内容的第一责任方；Federation Node 再按 ArtifactType allowlist、schema、大小和策略检查。
-- 每个 Membership 独立控制 `submit / receive / execute_task`。
+- 每个站点 Key 绑定 `app_id + site_id`，只允许读取该应用的命令。
 - pilot 可用可轮换 API key + TLS；生产可换 mTLS/workload identity，不改 payload schema。
-- `app_id/federation_id/site_id` 从认证和 Membership 推导/校验，不信任消息自报。
+- `app_id/federation_id/site_id` 从 URL、凭据和平台唯一域推导，不信任消息自报。
 - 插件返回意图，不直接穿越权限和发布底线。
 - 含可执行脚本的 Artifact 视为代码发布，需额外签名和审批；v1 可直接禁止。
 - 模型权重联邦中，普通 FedAvg 不等于 secure aggregation。需要安全聚合时必须有专门协议/插件，不用 `secure: true` 伪装。
@@ -495,13 +486,13 @@ audit_log
 ### 做
 
 1. 冻结 FedApp Manifest、Envelope、Artifact、Event/Command、Release/Delivery schema。
-2. 实现 Application/Site/Federation/Membership 注册与隔离。
+2. 实现 Application 自动建域、应用站点 Key、首次上传自动入域与隔离。
 3. 实现 Federation Node outbox/inbox、上下行、断网重试和 Artifact 校验。
 4. 实现 Artifact 存储、Submission、Task、Release、Delivery 通道。
 5. 注册应用时自动创建 AppFederationAgent，默认使用受限 `deepseek-harness` Core。
 6. 冻结三个插件 manifest/调用契约，只实现内置 JSON/opaque handler。
 7. 提供 conformance test runner 和一个从零按协议开发的参考应用。
-8. 提供 Federation Console，查看 Application/Federation/Site、通道状态并完成手工发布。
+8. 提供 Federation Console，查看 Application/Site、当前联邦版本和通道状态。
 
 ### 不做
 
@@ -519,8 +510,8 @@ audit_log
 2. Application A 的站点 1/2/3 能提交、存储、查看和分发 A 的工件，Application B 永远不可见。
 3. 平台关闭时业务应用照常工作；Federation Node 在恢复后不丢不重地上传。
 4. 小 JSON 和大 blob 都可通过 Descriptor 上传、存储和下载，digest 错误必须拒绝。
-5. 管理员可从某 Federation 的 Submission 创建 Release，目标站点可 stage、activate、ack 和 rollback。
-6. 不合法 Membership、schema、ArtifactType、app/federation 跨界访问均被拒绝并审计。
+5. 应用 Agent/算法创建 Release 后，目标站点可 stage、activate、ack 和 rollback。
+6. 错误应用 Key、未注册应用版本、schema、ArtifactType 和跨应用访问均被拒绝并审计。
 7. 参考应用通过 conformance test；其实现语言不是协议的一部分。
 8. 插件契约可用一个小型假算法验证：读两个 Artifact ref，产生一个新 Artifact 候选，不直接改数据库或分发。
 

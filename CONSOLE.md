@@ -2,7 +2,7 @@
 
 状态：**v1 管理通道已实现**
 用户：平台管理员、应用开发者、联邦运维人员  
-首要问题：**整个平台如何工作；当前注册了哪些应用，每个应用有哪些 Federation 和站点，联邦通道是否正常。**
+首要问题：**整个平台如何工作；当前注册了哪些应用，每个应用有哪些站点，联邦通道是否正常。**
 
 ---
 
@@ -37,8 +37,8 @@ Federation Console
 ├─ Platform Overview                    默认首页；平台架构与端到端联邦流程
 ├─ Applications
 │  └─ Application Detail
-│     ├─ Overview                       Agent、联邦拓扑与成员站点
-│     ├─ Versions                       联邦版本与各站点分发状态
+│     ├─ Overview                       自动接入的成员站点
+│     ├─ Versions                       当前联邦版本与各站点分发状态
 │     ├─ Evaluations                    每轮各站点的联邦前后效果
 │     ├─ Timeline                       联邦过程的可读时间线
 │     └─ Logs                           平台活动与站点上传日志
@@ -83,36 +83,21 @@ v1 不做独立的“插件市场”和“AI Dashboard”。插件配置等插�
 ```text
 Applications / Research Agent
 
-Research Agent                         v1.4.0   Agent: Idle   [管理]
+Research Agent                         v1.4.0   Agent: Idle
 com.acme.research
 
-┌─ Federation topology ─────────────────────────────────────────────────────┐
-│ App Federation Agent: manual-channel                                     │
-│                                                                          │
-│ ├─ main                 Artifact: observation, skill                     │
-│ │  ├─ site-hk-01        online   submit / receive / execute              │
-│ │  ├─ site-sg-01        online   submit / receive                        │
-│ │  └─ site-tokyo-01     delayed  receive                                 │
-│ └─ private-lab          Artifact: model-lora                             │
-│    ├─ lab-a             online   submit / receive                        │
-│    └─ lab-b             offline  submit / receive                        │
-└──────────────────────────────────────────────────────────────────────────┘
+SITE             APPLICATION VERSION  STATUS    LAST UPLOAD
+site-hk-01       1.4.0                online    24s ago
+site-sg-01       1.3.2                online    2m ago
 
 内容区横向菜单：概览 / 版本 / 效果 / 时间线 / 日志
 ```
 
-Overview 先展示一棵真实关系树，而不是地理地图：
-
-`Application → AppFederationAgent → Federation → Membership/Site`
-
-同一个 Site 可出现在多个 Federation；界面必须按 Membership 分别展示权限，不能把站点在线等同于
-它有提交、接收或执行任务的权限。
-
 ### Overview
 
-- Federation 拓扑和成员权限；
-- Agent Core 与运行状态；
-- Federation/Site 关系、节点版本、连接状态和 submit/receive/execute 权限。
+- 只展示已成功上传并自动加入本应用域的站点；
+- 应用版本来自站点上传的 `X-App-Version`；
+- 展示连接状态与最后上传时间，不显示内部权限字段。
 
 ### Logs
 
@@ -120,7 +105,7 @@ Overview 先展示一棵真实关系树，而不是地理地图：
 
 ### Versions
 
-每个 Release 展示不可变版本、包含的 Artifact、目标站点及 Delivery 状态：
+只展示联邦域当前分发的最新不可变 Release，以及各目标站点的 Delivery 状态：
 
 ```text
 pending → staged → active
@@ -128,38 +113,28 @@ pending → staged → active
 任意阶段可进入 failed，重试生成新的操作记录，不覆盖历史。
 ```
 
-管理员可在此创建 manual release、stage、activate 和 rollback。破坏性或批量动作先展示目标站点，
-要求二次确认，并显示操作结果。
+版本页是只读状态页；Release 和下发动作由应用 Agent/算法通道产生，不在这里手工创建。
 
 ---
 
-## 5. Federation Detail
+## 5. Federation
 
-从拓扑中的 Federation 进入，页面只关注一个 `(app_id, federation_id)`：
-
-| 区域 | 内容 |
-|---|---|
-| Memberships | Site、submit/receive/execute_task、加入时间、凭据状态 |
-| Channel | 最近 Submission、Task、Release、Delivery |
-| Plugins | Algorithm 与 Artifact Handler 的实际绑定版本 |
-| Activity | 此 Federation 的 Job、错误和审计事件 |
-
-成员权限用文本和可访问的勾选状态表示，不能只靠颜色。新增/移除成员是显式管理动作；移除成员不删除
-历史 Artifact、Release 或审计记录。
+每个 Application 只有一个 Federation，因此不提供独立 Federation 页面，也不提供新建域或配置成员按钮。
+部署流程签发应用站点 Key；站点第一次成功上传后自动出现在 Overview。
 
 ---
 
 ## 6. Sites（概览内）
 
-Sites 位于具体应用下，展示该应用各 Federation 的成员站点，不在站点层 union 数据。
+Sites 位于具体应用下，展示该应用唯一 Federation 的成员站点，不在站点层 union 数据。
 
 ```text
-SITE             NODE       APPLICATIONS  MEMBERSHIPS  LAST SEEN   ATTENTION
-site-hk-01       online     3             4            24s ago     —
-lab-b            offline    1             1            2h ago      2 pending
+SITE             APPLICATION VERSION  STATUS    LAST UPLOAD
+site-hk-01       1.4.0                online    24s ago
+lab-b            1.3.2                offline   2h ago
 ```
 
-当前 Site List 展示 Federation Node 版本、最近连接时间、所属 Federation 和成员权限。
+当前 Site List 展示站点部署的应用版本、连接状态和最近上传时间。
 
 ---
 
@@ -226,8 +201,5 @@ v1 管理通道交付以下视图：
 6. Application Timeline；
 7. Application Logs（含上传记录）。
 
-注册应用、建 Federation、添加 Site/Membership、手工 Release 和 rollback 使用同页表单或对话框，
-不为每个动作单建页面。
-
-验收标准：管理员能在三次点击内从 Application 找到任意 Federation/Site；能看到权限、最近在线时间、
-Agent/Delivery 异常；能完成注册和手工发布全流程；任何页面都不会混合不同 Application 的联邦内容。
+验收标准：管理员能在三次点击内从 Application 找到任意 Site；能看到应用版本、最近上传时间和
+Agent/Delivery 异常；任何页面都不会混合不同 Application 的联邦内容。

@@ -85,20 +85,9 @@ class FedAppManifest(BaseModel):
         return self
 
 
-class SiteRegistration(BaseModel):
+class AppSiteKeyCreate(BaseModel):
     site_id: StableId
     display_name: str = Field(min_length=1, max_length=160)
-
-
-class FederationRegistration(BaseModel):
-    federation_id: StableId
-    display_name: str = Field(min_length=1, max_length=160)
-
-
-class MembershipSpec(BaseModel):
-    can_submit: bool = False
-    can_receive: bool = False
-    can_execute_task: bool = False
 
 
 class AgentConfigurationUpdate(BaseModel):

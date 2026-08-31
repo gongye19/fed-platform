@@ -42,7 +42,7 @@ schema 约束后的可检索 metadata 和 storage key。这样 JSON 与大模型
 ```text
 Application ──1:1── AppFederationAgent
      │
-     ├──1:N── Federation ──N:M── Site
+     ├──1:1── Federation ──1:N── Site
      │                         via Membership
      │
      ├──1:N── ArtifactType / TaskType
@@ -85,10 +85,10 @@ Application 中重复，但它们在主键、外键、查询和对象存储路�
 | `applications` | app_id、名称、当前版本、状态 | `app_id` 主键 |
 | `application_versions` | 不可变 FedApp Manifest 与 digest | `(app_id, app_version)` 唯一 |
 | `app_agents` | 每个应用一个 Agent、状态、配置 revision | `app_id` 主键 |
-| `sites` | 全局 Site、Node 版本、last_seen_at、状态 | `site_id` 主键 |
-| `site_credentials` | token prefix、SHA-256 hash、到期/撤销时间 | 不保存明文 token |
-| `federations` | 应用内 Federation、名称、状态 | `(app_id, federation_id)` 主键 |
-| `memberships` | Site 加入 Federation 及三个权限 | `(app_id, federation_id, site_id)` 主键 |
+| `sites` | 首次上传后出现的全局 Site、last_seen_at、状态 | `site_id` 主键 |
+| `app_site_credentials` | app/site 绑定、token prefix、SHA-256 hash、到期/撤销时间 | 不保存明文 token |
+| `federations` | 应用唯一 Federation、名称、状态 | 每个 app 只有一个 active 行 |
+| `memberships` | Site 加入域、部署的 app_version、last_seen_at | `(app_id, federation_id, site_id)` 主键 |
 | `artifact_types` | 类型、purpose、format version、schema、media type | 旧版本不可原地修改 |
 | `task_types` | Task 类型和输入/输出 schema | 旧版本不可原地修改 |
 
@@ -191,11 +191,11 @@ v1 只在同一个 `(app_id, federation_id)` 内去重，不做跨 Application �
 上传过程：
 
 ```text
-1. API 从认证信息得到 app/federation/site，检查 Membership 和 ArtifactType
+1. API 用应用站点 Key 得到 app/site，校验 `X-App-Version` 与 ArtifactType，并解析应用唯一 Federation
 2. 流式写入临时对象，同时计算 SHA-256 和大小，不把整个文件读进内存
 3. digest/大小/schema 校验失败：删除临时对象，返回错误
 4. 将对象写到最终 digest key；已有相同对象则复用
-5. 一个 PostgreSQL 事务写 Artifact、Submission、Event、AgentJob、Audit
+5. 一个 PostgreSQL 事务自动创建/更新 Site 与 Membership，并写 Artifact、Submission、Event、AgentJob、Audit
 6. 提交成功后清理临时对象
 ```
 

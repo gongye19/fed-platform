@@ -8,14 +8,14 @@
 
 - 我们先定义 FedApp 协议，今后的新应用从第一天遵循。
 - 一个 Application 可以分发到若干 Site。
-- 只在同一 app_id 和 federation_id 内联邦，不同应用永远不 union。
+- 每个应用只有一个 Federation；只在该应用域内联邦，不同应用永远不 union。
 - 注册 Application 时，平台自动创建一个逻辑 AppFederationAgent。
-- Agent 可以为不同 Federation 绑定不同 Artifact Handler 和 Federation Algorithm。
+- Agent 可以为本应用绑定不同 Artifact Handler 和 Federation Algorithm。
 - 平台不预设联邦对象：它可以是 memory、skill、经验卡、LoRA 更新或模型权重。
 
 ## 现在先做什么
 
-1. 应用、站点、Federation 和 Membership 注册与隔离。
+1. 应用注册时自动建域；站点凭应用专属 Key 首次成功上传后自动加入。
 2. 站点产生按 schema 声明的 Artifact，断网可重试地上传 Submission。
 3. 平台按 digest 存工件，按 app/federation 存元数据。
 4. AppFederationAgent 接收事件；新应用默认由受限 DeepSeek Harness Core 生成结构化意图，`manual-channel` 可作为回退。

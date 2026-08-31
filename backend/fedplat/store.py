@@ -87,6 +87,16 @@ class Database:
                     Jsonb(agent_binding["config"]),
                 ),
             )
+            conn.execute(
+                """INSERT INTO federations (app_id, federation_id, display_name)
+                   SELECT %s, 'default', %s
+                   WHERE NOT EXISTS (
+                     SELECT 1 FROM federations
+                     WHERE app_id = %s AND disabled_at IS NULL
+                   )
+                   ON CONFLICT (app_id, federation_id) DO NOTHING""",
+                (app_id, manifest["display_name"], app_id),
+            )
 
             for item in manifest["artifact_types"]:
                 row = conn.execute(
@@ -249,137 +259,84 @@ class Database:
             )
             return row
 
-    def register_site(self, site_id: str, display_name: str, token_prefix: str, key_hash: str) -> None:
-        with self.connection() as conn:
-            created = conn.execute(
-                """INSERT INTO sites (site_id, display_name)
-                   VALUES (%s, %s)
-                   ON CONFLICT (site_id) DO NOTHING
-                   RETURNING site_id""",
-                (site_id, display_name),
-            ).fetchone()
-            if not created:
-                raise ConflictError("site_id is already registered")
-            conn.execute(
-                """INSERT INTO site_credentials
-                   (credential_id, site_id, token_prefix, key_hash)
-                   VALUES (%s, %s, %s, %s)""",
-                (uuid.uuid4(), site_id, token_prefix, key_hash),
-            )
-            conn.execute(
-                """INSERT INTO audit_log
-                   (actor_type, actor_id, action, site_id, target_type, target_id)
-                   VALUES ('admin', 'admin', 'site.registered', %s, 'site', %s)""",
-                (site_id, site_id),
-            )
-
-    def authenticate_site(self, key_hash: str) -> str:
-        with self.connection() as conn:
-            row = conn.execute(
-                """SELECT s.site_id
-                   FROM site_credentials c
-                   JOIN sites s USING (site_id)
-                   WHERE c.key_hash = %s
-                     AND c.revoked_at IS NULL
-                     AND (c.expires_at IS NULL OR c.expires_at > now())
-                     AND s.disabled_at IS NULL""",
-                (key_hash,),
-            ).fetchone()
-            if not row:
-                raise ForbiddenError("invalid site credential")
-            conn.execute("UPDATE sites SET last_seen_at = now() WHERE site_id = %s", (row["site_id"],))
-            return row["site_id"]
-
-    def create_federation(self, app_id: str, federation_id: str, display_name: str) -> bool:
-        with self.connection() as conn:
-            if not conn.execute("SELECT 1 FROM applications WHERE app_id = %s", (app_id,)).fetchone():
-                raise NotFoundError("application not found")
-            row = conn.execute(
-                """INSERT INTO federations (app_id, federation_id, display_name)
-                   VALUES (%s, %s, %s)
-                   ON CONFLICT (app_id, federation_id) DO NOTHING
-                   RETURNING federation_id""",
-                (app_id, federation_id, display_name),
-            ).fetchone()
-            if not row:
-                current = conn.execute(
-                    """SELECT display_name FROM federations
-                       WHERE app_id = %s AND federation_id = %s""",
-                    (app_id, federation_id),
-                ).fetchone()
-                if current["display_name"] != display_name:
-                    raise ConflictError("federation_id is already registered with another name")
-                return False
-            conn.execute(
-                """INSERT INTO audit_log
-                   (actor_type, actor_id, action, app_id, federation_id, target_type, target_id)
-                   VALUES ('admin', 'admin', 'federation.created', %s, %s, 'federation', %s)""",
-                (app_id, federation_id, federation_id),
-            )
-            return True
-
-    def put_membership(
+    def issue_app_site_key(
         self,
         app_id: str,
-        federation_id: str,
         site_id: str,
-        permissions: dict[str, bool],
+        display_name: str,
+        token_prefix: str,
+        key_hash: str,
     ) -> None:
         with self.connection() as conn:
             if not conn.execute(
-                "SELECT 1 FROM federations WHERE app_id = %s AND federation_id = %s AND disabled_at IS NULL",
-                (app_id, federation_id),
+                "SELECT 1 FROM applications WHERE app_id = %s AND status = 'active'",
+                (app_id,),
             ).fetchone():
-                raise NotFoundError("federation not found")
-            if not conn.execute(
-                "SELECT 1 FROM sites WHERE site_id = %s AND disabled_at IS NULL", (site_id,)
-            ).fetchone():
-                raise NotFoundError("site not found")
+                raise NotFoundError("application not found")
             conn.execute(
-                """INSERT INTO memberships
-                   (app_id, federation_id, site_id, can_submit, can_receive, can_execute_task)
-                   VALUES (%s, %s, %s, %s, %s, %s)
-                   ON CONFLICT (app_id, federation_id, site_id) DO UPDATE
-                   SET can_submit = EXCLUDED.can_submit,
-                       can_receive = EXCLUDED.can_receive,
-                       can_execute_task = EXCLUDED.can_execute_task,
-                       ended_at = NULL""",
-                (
-                    app_id,
-                    federation_id,
-                    site_id,
-                    permissions["can_submit"],
-                    permissions["can_receive"],
-                    permissions["can_execute_task"],
-                ),
+                """UPDATE app_site_credentials SET revoked_at = now()
+                   WHERE app_id = %s AND site_id = %s AND revoked_at IS NULL""",
+                (app_id, site_id),
+            )
+            conn.execute(
+                """INSERT INTO app_site_credentials
+                   (credential_id, app_id, site_id, display_name, token_prefix, key_hash)
+                   VALUES (%s, %s, %s, %s, %s, %s)""",
+                (uuid.uuid4(), app_id, site_id, display_name, token_prefix, key_hash),
             )
             conn.execute(
                 """INSERT INTO audit_log
-                   (actor_type, actor_id, action, app_id, federation_id, site_id,
-                    target_type, target_id, detail)
-                   VALUES ('admin', 'admin', 'membership.updated', %s, %s, %s,
-                           'membership', %s, %s)""",
-                (app_id, federation_id, site_id, site_id, Jsonb(permissions)),
+                   (actor_type, actor_id, action, app_id, site_id, target_type, target_id)
+                   VALUES ('admin', 'admin', 'site.key.issued', %s, %s, 'site', %s)""",
+                (app_id, site_id, site_id),
             )
+
+    def authenticate_app_site(self, app_id: str, key_hash: str) -> dict[str, str]:
+        with self.connection() as conn:
+            row = conn.execute(
+                """SELECT site_id, display_name
+                   FROM app_site_credentials
+                   WHERE app_id = %s AND key_hash = %s
+                     AND revoked_at IS NULL
+                     AND (expires_at IS NULL OR expires_at > now())""",
+                (app_id, key_hash),
+            ).fetchone()
+            if not row:
+                raise ForbiddenError("invalid application site credential")
+            return row
 
     def submission_policy(
         self,
         app_id: str,
-        federation_id: str,
-        site_id: str,
+        app_version: str,
         type_name: str,
         format_version: int,
     ) -> dict[str, Any]:
         with self.connection() as conn:
-            membership = conn.execute(
-                """SELECT can_submit FROM memberships
-                   WHERE app_id = %s AND federation_id = %s AND site_id = %s
-                     AND ended_at IS NULL""",
-                (app_id, federation_id, site_id),
-            ).fetchone()
-            if not membership or not membership["can_submit"]:
-                raise ForbiddenError("site cannot submit to this federation")
-            return self._artifact_policy(conn, app_id, federation_id, type_name, format_version)
+            if not conn.execute(
+                """SELECT 1 FROM application_versions
+                   WHERE app_id = %s AND app_version = %s""",
+                (app_id, app_version),
+            ).fetchone():
+                raise ConflictError("site application version is not registered")
+            federation_id = self._app_federation(conn, app_id)
+            return {
+                **self._artifact_policy(conn, app_id, federation_id, type_name, format_version),
+                "federation_id": federation_id,
+            }
+
+    @staticmethod
+    def _app_federation(conn: psycopg.Connection, app_id: str) -> str:
+        rows = conn.execute(
+            """SELECT federation_id FROM federations
+               WHERE app_id = %s AND disabled_at IS NULL""",
+            (app_id,),
+        ).fetchall()
+        if not rows:
+            raise NotFoundError("application federation not found")
+        if len(rows) > 1:
+            raise ConflictError("application has more than one active federation")
+        return rows[0]["federation_id"]
 
     def artifact_policy(
         self,
@@ -516,21 +473,64 @@ class Database:
         app_id: str,
         federation_id: str,
         site_id: str,
+        display_name: str,
+        app_version: str,
         descriptor: dict[str, Any],
         artifact_purpose: str,
         storage_key: str,
         idempotency_key: str,
     ) -> tuple[dict[str, Any], bool]:
         with self.connection() as conn:
+            if not conn.execute(
+                """SELECT 1 FROM application_versions
+                   WHERE app_id = %s AND app_version = %s""",
+                (app_id, app_version),
+            ).fetchone():
+                raise ConflictError("site application version is not registered")
+            if self._app_federation(conn, app_id) != federation_id:
+                raise ConflictError("application federation changed during upload")
+
+            conn.execute(
+                """INSERT INTO sites (site_id, display_name, last_seen_at)
+                   VALUES (%s, %s, now())
+                   ON CONFLICT (site_id) DO UPDATE
+                   SET display_name = EXCLUDED.display_name,
+                       last_seen_at = now(),
+                       disabled_at = NULL""",
+                (site_id, display_name),
+            )
             membership = conn.execute(
-                """SELECT can_submit FROM memberships
-                   WHERE app_id = %s AND federation_id = %s AND site_id = %s
-                     AND ended_at IS NULL
-                   FOR SHARE""",
+                """SELECT 1 FROM memberships
+                   WHERE app_id = %s AND federation_id = %s AND site_id = %s""",
                 (app_id, federation_id, site_id),
             ).fetchone()
-            if not membership or not membership["can_submit"]:
-                raise ForbiddenError("site cannot submit to this federation")
+            conn.execute(
+                """INSERT INTO memberships
+                   (app_id, federation_id, site_id, can_submit, can_receive,
+                    can_execute_task, app_version, last_seen_at)
+                   VALUES (%s, %s, %s, true, true, false, %s, now())
+                   ON CONFLICT (app_id, federation_id, site_id) DO UPDATE
+                   SET can_submit = true, can_receive = true,
+                       app_version = EXCLUDED.app_version,
+                       last_seen_at = now(), ended_at = NULL""",
+                (app_id, federation_id, site_id, app_version),
+            )
+            if not membership:
+                conn.execute(
+                    """INSERT INTO audit_log
+                       (actor_type, actor_id, action, app_id, federation_id, site_id,
+                        target_type, target_id, detail)
+                       VALUES ('site', %s, 'site.enrolled', %s, %s, %s,
+                               'membership', %s, %s)""",
+                    (
+                        site_id,
+                        app_id,
+                        federation_id,
+                        site_id,
+                        site_id,
+                        Jsonb({"app_version": app_version}),
+                    ),
+                )
 
             self._upsert_artifact(conn, app_id, federation_id, descriptor, storage_key)
 
@@ -621,9 +621,11 @@ class Database:
             ).fetchall()
             memberships = conn.execute(
                 """SELECT m.federation_id, m.site_id, s.display_name,
-                          m.can_submit, m.can_receive, m.can_execute_task, s.last_seen_at
+                          m.can_submit, m.can_receive, m.can_execute_task,
+                          m.app_version, m.last_seen_at
                    FROM memberships m JOIN sites s USING (site_id)
                    WHERE m.app_id = %s AND m.ended_at IS NULL
+                     AND s.disabled_at IS NULL
                    ORDER BY m.federation_id, m.site_id""",
                 (app_id,),
             ).fetchall()
@@ -937,15 +939,18 @@ class Database:
             )
             return commands
 
-    def site_commands(self, site_id: str, after: int, limit: int) -> list[dict[str, Any]]:
+    def site_commands(
+        self, app_id: str, site_id: str, after: int, limit: int
+    ) -> list[dict[str, Any]]:
         with self.connection() as conn:
             return conn.execute(
                 """SELECT command_id, command_cursor, app_id, federation_id,
                           command_type, attempt, payload, created_at
                    FROM commands
-                   WHERE site_id = %s AND command_cursor > %s AND status = 'pending'
+                   WHERE app_id = %s AND site_id = %s
+                     AND command_cursor > %s AND status = 'pending'
                    ORDER BY command_cursor LIMIT %s""",
-                (site_id, after, limit),
+                (app_id, site_id, after, limit),
             ).fetchall()
 
     def command_artifacts(self, command_id: uuid.UUID) -> list[dict[str, Any]]:
@@ -964,13 +969,19 @@ class Database:
             ).fetchall()
 
     def acknowledge_command(
-        self, site_id: str, command_id: uuid.UUID, result: str, error: str | None
+        self,
+        app_id: str,
+        site_id: str,
+        command_id: uuid.UUID,
+        result: str,
+        error: str | None,
     ) -> dict[str, Any]:
         with self.connection() as conn:
             command = conn.execute(
                 """SELECT command_id, delivery_id, app_id, federation_id, command_type, status
-                   FROM commands WHERE command_id = %s AND site_id = %s FOR UPDATE""",
-                (command_id, site_id),
+                   FROM commands
+                   WHERE command_id = %s AND app_id = %s AND site_id = %s FOR UPDATE""",
+                (command_id, app_id, site_id),
             ).fetchone()
             if not command:
                 raise NotFoundError("command not found")

@@ -235,52 +235,16 @@ td small { margin-top: 4px; }
 .app-nav button:hover { color: var(--secondary); }
 .app-nav button.active { color: var(--ink); }
 .app-nav button.active::after { position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--accent); content: ""; }
-.overview-sites { margin-top: 12px; }
 .evaluation-result { font-weight: 560; }
 .evaluation-result--up { color: var(--green); }
 .evaluation-result--down { color: var(--red); }
 .evaluation-result--same { color: var(--secondary); }
 .evaluation-result--waiting { color: var(--amber); }
 
-.topology { max-width: 1320px; margin: 0 auto; overflow: hidden; background: var(--surface-1); border: 1px solid var(--line); border-radius: var(--radius-md); }
-.topology__legend { display: flex; justify-content: space-between; padding: 12px 16px; color: var(--muted); background: rgba(255, 255, 255, .018); border-bottom: 1px solid var(--line); font: 500 10px/1.2 "Geist Mono Variable", monospace; letter-spacing: .05em; }
-.topology__root { position: relative; margin: 28px 28px 0; padding: 15px 18px 16px 44px; color: var(--ink); background: var(--surface-3); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); }
-.topology__root::before { position: absolute; top: 19px; left: 18px; width: 8px; height: 8px; background: var(--accent); border: 3px solid rgba(94, 106, 210, .2); border-radius: 50%; content: ""; }
-.topology__root::after { position: absolute; bottom: -29px; left: 23px; width: 1px; height: 29px; background: var(--line-strong); content: ""; }
-.topology__root p { margin-bottom: 5px; color: var(--muted); font: 500 9px/1 "Geist Mono Variable", monospace; letter-spacing: .07em; }
-.topology__root strong { margin-right: 14px; font-weight: 560; }
-.topology__root code { color: #a78bfa; }
-.topology__branches { display: grid; padding: 28px; }
-.topology__branch { position: relative; display: grid; grid-template-columns: 250px 1fr; gap: 28px; padding: 0 0 24px 24px; border-left: 1px solid var(--line-strong); }
-.topology__branch:last-child { border-left-color: transparent; }
-.topology__branch::before { position: absolute; top: 32px; left: 0; width: 24px; height: 1px; background: var(--line-strong); content: ""; }
-.topology__federation { display: grid; align-content: center; min-height: 66px; padding: 11px 14px; color: var(--ink); text-align: left; background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); }
-.topology__federation span { color: var(--muted); font: 500 9px/1 "Geist Mono Variable", monospace; letter-spacing: .06em; }
-.topology__federation strong { margin: 7px 0 3px; font-weight: 560; }
-.topology__federation code { color: var(--muted); }
-.topology__sites { position: relative; display: grid; gap: 7px; }
-.topology__sites::before { position: absolute; top: 32px; left: -28px; width: 28px; height: 1px; background: var(--line-strong); content: ""; }
-.topology__site { display: grid; grid-template-columns: minmax(150px, 1.5fr) 100px minmax(150px, 1fr); align-items: center; min-height: 66px; padding: 10px 13px; background: rgba(255, 255, 255, .018); border: 1px solid var(--line); border-radius: var(--radius-sm); }
-.topology__site strong, .topology__site code { display: block; }
-.topology__site strong { font-weight: 540; }
-.topology__site code { margin-top: 4px; color: var(--muted); }
-.topology__site p { margin: 0; color: var(--muted); font: 11px/1.4 "Geist Mono Variable", monospace; }
-
-.release-layout { display: grid; grid-template-columns: minmax(280px, .7fr) minmax(480px, 1.3fr); gap: 12px; max-width: 1320px; margin: 0 auto; align-items: start; }
-.release-compose, .release-list { overflow: hidden; background: var(--surface-1); border: 1px solid var(--line); border-radius: var(--radius-md); }
-.release-compose { position: sticky; top: 20px; padding: 20px; }
-.artifact-picker { display: grid; max-height: 360px; margin: 18px 0; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); }
-.artifact-picker label { display: grid; grid-template-columns: 20px 1fr auto; align-items: center; gap: 9px; padding: 11px; border-bottom: 1px solid var(--line); cursor: pointer; }
-.artifact-picker label:last-child { border-bottom: 0; }
-.artifact-picker label:hover { background: rgba(255, 255, 255, .025); }
-.artifact-picker input { width: 16px; min-height: auto; accent-color: var(--accent); }
-.artifact-picker strong, .artifact-picker code { display: block; }
-.artifact-picker strong { font-weight: 540; }
-.artifact-picker code { margin-top: 3px; color: var(--muted); }
+.release-list { max-width: 1320px; margin: 0 auto; overflow: hidden; background: var(--surface-1); border: 1px solid var(--line); border-radius: var(--radius-md); }
 .release-card { border-bottom: 1px solid var(--line); }
 .release-card:last-child { border-bottom: 0; }
-.release-card > button { display: flex; align-items: center; justify-content: space-between; gap: 20px; width: 100%; min-height: 72px; padding: 14px 18px; text-align: left; background: transparent; border: 0; cursor: pointer; transition: background 150ms ease-out; }
-.release-card > button:hover, .release-card.active > button { background: rgba(255, 255, 255, .028); }
+.release-summary { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 72px; padding: 14px 18px; background: rgba(255, 255, 255, .028); }
 .release-card strong, .release-card small { display: block; }
 .release-card small { margin-top: 5px; }
 .release-counts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
@@ -367,10 +331,7 @@ td small { margin-top: 4px; }
   .app-nav { gap: 18px; }
   .ledger { overflow-x: auto; }
   .ledger__head, .ledger__row { min-width: 850px; }
-  .topology__branch { grid-template-columns: 210px 1fr; }
-  .topology__site { grid-template-columns: 1fr; gap: 8px; }
-  .release-layout, .contract { grid-template-columns: 1fr; }
-  .release-compose { position: static; }
+  .contract { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 640px) {
@@ -384,12 +345,7 @@ td small { margin-top: 4px; }
   .page-header .button, .header-actions { width: 100%; }
   .header-actions .button { flex: 1; }
   .toolbar { align-items: stretch; }
-  .topology__legend { gap: 15px; }
-  .topology__root { margin: 18px 16px 0; }
-  .topology__branches { padding: 28px 16px 16px; }
-  .topology__branch { grid-template-columns: 1fr; gap: 9px; padding-left: 16px; }
-  .topology__sites::before { display: none; }
-  .release-card > button { align-items: flex-start; flex-direction: column; }
+  .release-summary { align-items: flex-start; flex-direction: column; }
   .release-counts { justify-content: flex-start; }
   .delivery-grid > div { grid-template-columns: 1fr; }
   .timeline__item { grid-template-columns: 16px 1fr; }

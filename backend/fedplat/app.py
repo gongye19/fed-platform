@@ -24,23 +24,22 @@ from fedplat.agent_core import (
 from fedplat.artifact_store import ArtifactStoreError, S3ArtifactStore
 from fedplat.protocol import (
     AgentConfigurationUpdate,
+    AppSiteKeyCreate,
     ArtifactDescriptor,
     CommandAck,
     DeliveryAction,
     Digest,
-    FederationRegistration,
     FedAppManifest,
-    MembershipSpec,
     ReleaseCreate,
-    SiteRegistration,
     StableId,
+    Version,
     json_digest,
 )
 from fedplat.settings import Settings, get_settings
 from fedplat.store import ConflictError, Database, ForbiddenError, NotFoundError
 
 
-app = FastAPI(title="FedAgent Platform", version="0.6.0")
+app = FastAPI(title="FedAgent Platform", version="0.7.0")
 cors_origins = [
     origin.strip()
     for origin in os.environ.get("FEDPLAT_CORS_ORIGINS", "").split(",")
@@ -50,7 +49,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_methods=["GET", "POST", "PUT", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
+    allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-App-Version"],
 )
 
 
@@ -127,12 +126,13 @@ def require_admin(
         fail(401, "E_AUTH", "invalid admin credential")
 
 
-def authenticate_site(
+def authenticate_app_site(
+    app_id: StableId,
     db: Annotated[Database, Depends(get_database)],
     authorization: Annotated[str | None, Header()] = None,
-) -> str:
+) -> dict[str, str]:
     try:
-        return db.authenticate_site(token_hash(bearer_token(authorization)))
+        return db.authenticate_app_site(app_id, token_hash(bearer_token(authorization)))
     except ForbiddenError as exc:
         fail(401, "E_AUTH", str(exc))
 
@@ -287,17 +287,28 @@ def application_topology(
         map_store_error(exc)
 
 
-@app.post("/admin/v1/sites", status_code=201, dependencies=[Depends(require_admin)])
-def register_site(
-    body: SiteRegistration,
+@app.post(
+    "/admin/v1/apps/{app_id}/site-keys",
+    status_code=201,
+    dependencies=[Depends(require_admin)],
+)
+def issue_app_site_key(
+    app_id: StableId,
+    body: AppSiteKeyCreate,
     db: Annotated[Database, Depends(get_database)],
-) -> dict[str, str]:
+) -> dict[str, Any]:
     api_key = secrets.token_urlsafe(32)
     try:
-        db.register_site(body.site_id, body.display_name, api_key[:12], token_hash(api_key))
+        db.issue_app_site_key(
+            app_id,
+            body.site_id,
+            body.display_name,
+            api_key[:12],
+            token_hash(api_key),
+        )
     except (ConflictError, NotFoundError, ForbiddenError) as exc:
         map_store_error(exc)
-    return {"site_id": body.site_id, "api_key": api_key}
+    return {"app_id": app_id, "site_id": body.site_id, "api_key": api_key}
 
 
 @app.get("/admin/v1/sites", dependencies=[Depends(require_admin)])
@@ -315,40 +326,6 @@ def list_activity(
     limit: int = Query(default=100, ge=1, le=100),
 ) -> dict[str, Any]:
     return {"items": db.list_activity(limit, app_id)}
-
-
-@app.post("/admin/v1/apps/{app_id}/federations", dependencies=[Depends(require_admin)])
-def create_federation(
-    app_id: StableId,
-    body: FederationRegistration,
-    response: Response,
-    db: Annotated[Database, Depends(get_database)],
-) -> dict[str, Any]:
-    try:
-        created = db.create_federation(app_id, body.federation_id, body.display_name)
-    except (ConflictError, NotFoundError, ForbiddenError) as exc:
-        map_store_error(exc)
-    response.status_code = 201 if created else 200
-    return {"app_id": app_id, "federation_id": body.federation_id, "created": created}
-
-
-@app.put(
-    "/admin/v1/apps/{app_id}/federations/{federation_id}/memberships/{site_id}",
-    dependencies=[Depends(require_admin)],
-)
-def put_membership(
-    app_id: StableId,
-    federation_id: StableId,
-    site_id: StableId,
-    body: MembershipSpec,
-    db: Annotated[Database, Depends(get_database)],
-) -> dict[str, Any]:
-    permissions = body.model_dump()
-    try:
-        db.put_membership(app_id, federation_id, site_id, permissions)
-    except (ConflictError, NotFoundError, ForbiddenError) as exc:
-        map_store_error(exc)
-    return {"app_id": app_id, "federation_id": federation_id, "site_id": site_id, **permissions}
 
 
 @app.get(
@@ -517,15 +494,16 @@ def request_delivery_action(
         map_store_error(exc)
 
 
-@app.get("/site/v1/commands")
+@app.get("/site/v1/apps/{app_id}/commands")
 def list_site_commands(
-    site_id: Annotated[str, Depends(authenticate_site)],
+    app_id: StableId,
+    site: Annotated[dict[str, str], Depends(authenticate_app_site)],
     db: Annotated[Database, Depends(get_database)],
     artifacts: Annotated[S3ArtifactStore, Depends(get_artifact_store)],
     after: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=100),
 ) -> dict[str, Any]:
-    items = db.site_commands(site_id, after, limit)
+    items = db.site_commands(app_id, site["site_id"], after, limit)
     for item in items:
         if item["command_type"] != "release.stage":
             continue
@@ -542,23 +520,25 @@ def list_site_commands(
     }
 
 
-@app.post("/site/v1/commands/{command_id}/ack")
+@app.post("/site/v1/apps/{app_id}/commands/{command_id}/ack")
 def acknowledge_site_command(
+    app_id: StableId,
     command_id: uuid.UUID,
     body: CommandAck,
-    site_id: Annotated[str, Depends(authenticate_site)],
+    site: Annotated[dict[str, str], Depends(authenticate_app_site)],
     db: Annotated[Database, Depends(get_database)],
 ) -> dict[str, Any]:
     try:
-        return db.acknowledge_command(site_id, command_id, body.result, body.error)
+        return db.acknowledge_command(
+            app_id, site["site_id"], command_id, body.result, body.error
+        )
     except (ConflictError, NotFoundError, ForbiddenError) as exc:
         map_store_error(exc)
 
 
-@app.post("/site/v1/apps/{app_id}/federations/{federation_id}/artifacts", status_code=201)
+@app.post("/site/v1/apps/{app_id}/artifacts", status_code=201)
 def submit_artifact(
     app_id: StableId,
-    federation_id: StableId,
     response: Response,
     descriptor_json: Annotated[str, Form(alias="descriptor")],
     content: Annotated[UploadFile, File()],
@@ -566,7 +546,8 @@ def submit_artifact(
         str,
         Header(alias="Idempotency-Key", min_length=1, max_length=160),
     ],
-    site_id: Annotated[str, Depends(authenticate_site)],
+    app_version: Annotated[Version, Header(alias="X-App-Version")],
+    site: Annotated[dict[str, str], Depends(authenticate_app_site)],
     settings: Annotated[Settings, Depends(get_settings)],
     db: Annotated[Database, Depends(get_database)],
     artifacts: Annotated[S3ArtifactStore, Depends(get_artifact_store)],
@@ -578,11 +559,12 @@ def submit_artifact(
 
     try:
         policy = db.submission_policy(
-            app_id, federation_id, site_id, descriptor.type_name, descriptor.format_version
+            app_id, app_version, descriptor.type_name, descriptor.format_version
         )
     except (ConflictError, NotFoundError, ForbiddenError) as exc:
         map_store_error(exc)
 
+    federation_id = policy["federation_id"]
     storage_key = store_artifact_upload(
         app_id=app_id,
         federation_id=federation_id,
@@ -598,7 +580,9 @@ def submit_artifact(
         submission, created = db.create_submission(
             app_id=app_id,
             federation_id=federation_id,
-            site_id=site_id,
+            site_id=site["site_id"],
+            display_name=site["display_name"],
+            app_version=app_version,
             descriptor=descriptor_data,
             artifact_purpose=policy["purpose"],
             storage_key=storage_key,
