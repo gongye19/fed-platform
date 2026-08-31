@@ -105,6 +105,13 @@ def test_registry_and_artifact_submission(live_stack):
                 "media_type": "application/json",
                 "purpose": "evaluation",
                 "metadata_schema": metadata_schema,
+            },
+            {
+                "type": "test.release",
+                "format_version": 1,
+                "media_type": "application/json",
+                "purpose": "release",
+                "metadata_schema": metadata_schema,
             }
         ],
     }
@@ -200,9 +207,40 @@ def test_registry_and_artifact_submission(live_stack):
     assert len(evaluations.json()["items"]) == 1
     assert evaluations.json()["items"][0]["metadata"] == {"kind": "demo"}
 
+    release_content = b'{"entries":[]}'
+    release_digest = "sha256:" + hashlib.sha256(release_content).hexdigest()
+    release_descriptor = {
+        "digest": release_digest,
+        "type": "test.release",
+        "format_version": 1,
+        "media_type": "application/json",
+        "size_bytes": len(release_content),
+        "metadata": {"kind": "demo"},
+    }
+    imported = client.post(
+        f"/admin/v1/apps/{app_id}/federations/main/artifacts",
+        data={"descriptor": json.dumps(release_descriptor)},
+        files={"content": ("release.json", release_content, "application/json")},
+        headers=admin,
+    )
+    assert imported.status_code == 201 and imported.json()["created"] is True
+    repeated_import = client.post(
+        f"/admin/v1/apps/{app_id}/federations/main/artifacts",
+        data={"descriptor": json.dumps(release_descriptor)},
+        files={"content": ("release.json", release_content, "application/json")},
+        headers=admin,
+    )
+    assert repeated_import.status_code == 200 and repeated_import.json()["created"] is False
+    artifact = client.get(
+        f"/admin/v1/apps/{app_id}/federations/main/artifacts/{release_digest}",
+        headers=admin,
+    )
+    assert artifact.status_code == 200
+    assert artifact.json()["download_url"].startswith("http")
+
     release = client.post(
         f"/admin/v1/apps/{app_id}/federations/main/releases",
-        json={"artifact_digests": [digest]},
+        json={"artifact_digests": [release_digest]},
         headers=admin,
     )
     assert release.status_code == 201
@@ -217,7 +255,7 @@ def test_registry_and_artifact_submission(live_stack):
     commands = client.get("/site/v1/commands", headers=site_auth)
     stage_command = commands.json()["items"][0]
     assert stage_command["command_type"] == "release.stage"
-    assert stage_command["payload"]["artifacts"][0]["digest"] == digest
+    assert stage_command["payload"]["artifacts"][0]["digest"] == release_digest
     assert stage_command["payload"]["artifacts"][0]["download_url"].startswith("http")
     acknowledged = client.post(
         f"/site/v1/commands/{stage_command['command_id']}/ack",

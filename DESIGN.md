@@ -142,7 +142,7 @@ PUT /admin/v1/apps/{app_id}/federations/{federation_id}/plugins
     绑定 Artifact Handler / Federation Algorithm
 ```
 
-没有联邦算法插件时，Application 仍可注册和接收 Submission。Agent Core 的结构化意图会被保存；管理员仍可创建 Release 并分发，这是当前最小可用通道。
+没有联邦算法插件时，Application 仍可注册和接收 Submission。Agent Core 的结构化意图会被保存；受保护的算法协调器可读取贡献、写回发布 Artifact，管理员仍可创建 Release 并分发。
 
 ---
 

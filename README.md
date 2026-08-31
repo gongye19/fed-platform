@@ -20,6 +20,7 @@
 - Railway/S3-compatible Artifact 存储；
 - Artifact digest、大小、media type 和 metadata schema 校验；
 - Artifact purpose（contribution / release / evaluation）与站点评测结果查询；
+- 联邦算法使用的受保护 Artifact 读取与聚合结果写回接口；
 - Submission、Event、AgentJob 同事务写入及幂等；
 - 不可变 Release、站点 Delivery、stage/activate/rollback Command 与 Ack；
 - PostgreSQL `SKIP LOCKED` Agent Worker；
@@ -28,7 +29,7 @@
 - Application、拓扑、工件、发布、站点和活动管理 API；
 - 可独立部署的 React 管理控制台，包含平台架构概览、应用、站点和活动视图。
 
-旧 SQLite `Update / Digest / Plugin` spike 已删除，不提供兼容接口。DeepSeek Harness Agent Core 与 `manual-channel` 回退已实现；联邦算法与 Artifact Handler 插件仍只保留协议位置，等第一个真实应用确定语义后再实现。
+旧 SQLite `Update / Digest / Plugin` spike 已删除，不提供兼容接口。DeepSeek Harness Agent Core 与 `manual-channel` 回退已实现；Fed-EvoMed 已用外部协调器验证算法通道，通用插件执行器仍保留协议位置。
 
 ## 仓库结构
 
@@ -79,6 +80,8 @@ POST /admin/v1/apps/{app_id}/federations
 PUT  /admin/v1/apps/{app_id}/federations/{federation_id}/memberships/{site_id}
 GET  /admin/v1/apps/{app_id}/federations/{federation_id}/submissions
 GET  /admin/v1/apps/{app_id}/federations/{federation_id}/evaluations
+POST /admin/v1/apps/{app_id}/federations/{federation_id}/artifacts
+GET  /admin/v1/apps/{app_id}/federations/{federation_id}/artifacts/{digest}
 POST /admin/v1/apps/{app_id}/federations/{federation_id}/releases
 GET  /admin/v1/apps/{app_id}/federations/{federation_id}/releases
 GET  /admin/v1/apps/{app_id}/federations/{federation_id}/releases/{release_id}

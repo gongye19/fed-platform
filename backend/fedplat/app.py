@@ -27,6 +27,7 @@ from fedplat.protocol import (
     ArtifactDescriptor,
     CommandAck,
     DeliveryAction,
+    Digest,
     FederationRegistration,
     FedAppManifest,
     MembershipSpec,
@@ -39,7 +40,7 @@ from fedplat.settings import Settings, get_settings
 from fedplat.store import ConflictError, Database, ForbiddenError, NotFoundError
 
 
-app = FastAPI(title="FedAgent Platform", version="0.5.0")
+app = FastAPI(title="FedAgent Platform", version="0.6.0")
 cors_origins = [
     origin.strip()
     for origin in os.environ.get("FEDPLAT_CORS_ORIGINS", "").split(",")
@@ -57,7 +58,7 @@ app.add_middleware(
 async def limit_artifact_upload(request: Request, call_next):
     if (
         request.method == "POST"
-        and request.url.path.startswith("/site/v1/apps/")
+        and "/v1/apps/" in request.url.path
         and request.url.path.endswith("/artifacts")
     ):
         raw_length = request.headers.get("content-length")
@@ -144,6 +145,51 @@ def map_store_error(exc: RuntimeError) -> None:
     if isinstance(exc, ForbiddenError):
         fail(403, "E_FORBIDDEN", str(exc))
     raise exc
+
+
+def store_artifact_upload(
+    *,
+    app_id: str,
+    federation_id: str,
+    descriptor: ArtifactDescriptor,
+    content: UploadFile,
+    policy: dict[str, Any],
+    settings: Settings,
+    artifacts: S3ArtifactStore,
+) -> str:
+    if descriptor.media_type != policy["media_type"]:
+        fail(400, "E_MEDIA_TYPE", "descriptor media_type does not match ArtifactType")
+    if content.content_type and content.content_type != descriptor.media_type:
+        fail(400, "E_MEDIA_TYPE", "upload content type does not match descriptor")
+    try:
+        Draft202012Validator(policy["metadata_schema"]).validate(descriptor.metadata)
+    except JsonSchemaValidationError as exc:
+        fail(400, "E_BAD_METADATA", exc.message)
+
+    if descriptor.size_bytes > settings.max_artifact_bytes:
+        fail(413, "E_ARTIFACT_TOO_LARGE", "artifact exceeds configured upload limit")
+    digest = hashlib.sha256()
+    actual_size = 0
+    content.file.seek(0)
+    while chunk := content.file.read(1024 * 1024):
+        actual_size += len(chunk)
+        if actual_size > settings.max_artifact_bytes:
+            fail(413, "E_ARTIFACT_TOO_LARGE", "artifact exceeds configured upload limit")
+        digest.update(chunk)
+    if actual_size != descriptor.size_bytes or "sha256:" + digest.hexdigest() != descriptor.digest:
+        fail(400, "E_DIGEST", "artifact size or digest verification failed")
+
+    try:
+        return artifacts.put_file(
+            app_id=app_id,
+            federation_id=federation_id,
+            digest=descriptor.digest,
+            size_bytes=descriptor.size_bytes,
+            media_type=descriptor.media_type,
+            file=content.file,
+        )
+    except ArtifactStoreError as exc:
+        fail(502, "E_ARTIFACT_STORE", str(exc))
 
 
 @app.get("/health")
@@ -331,6 +377,74 @@ def list_evaluations(
 
 
 @app.post(
+    "/admin/v1/apps/{app_id}/federations/{federation_id}/artifacts",
+    status_code=201,
+    dependencies=[Depends(require_admin)],
+)
+def create_artifact(
+    app_id: StableId,
+    federation_id: StableId,
+    response: Response,
+    descriptor_json: Annotated[str, Form(alias="descriptor")],
+    content: Annotated[UploadFile, File()],
+    settings: Annotated[Settings, Depends(get_settings)],
+    db: Annotated[Database, Depends(get_database)],
+    artifacts: Annotated[S3ArtifactStore, Depends(get_artifact_store)],
+) -> dict[str, Any]:
+    try:
+        descriptor = ArtifactDescriptor.model_validate_json(descriptor_json)
+        policy = db.artifact_policy(
+            app_id, federation_id, descriptor.type_name, descriptor.format_version
+        )
+    except ValidationError as exc:
+        fail(400, "E_BAD_DESCRIPTOR", str(exc))
+    except (ConflictError, NotFoundError, ForbiddenError) as exc:
+        map_store_error(exc)
+    storage_key = store_artifact_upload(
+        app_id=app_id,
+        federation_id=federation_id,
+        descriptor=descriptor,
+        content=content,
+        policy=policy,
+        settings=settings,
+        artifacts=artifacts,
+    )
+    try:
+        artifact, created = db.create_artifact(
+            app_id=app_id,
+            federation_id=federation_id,
+            descriptor=descriptor.model_dump(by_alias=True, mode="json"),
+            storage_key=storage_key,
+        )
+    except (ConflictError, NotFoundError, ForbiddenError) as exc:
+        map_store_error(exc)
+    response.status_code = 201 if created else 200
+    artifact.pop("storage_key", None)
+    return {**artifact, "created": created}
+
+
+@app.get(
+    "/admin/v1/apps/{app_id}/federations/{federation_id}/artifacts/{digest}",
+    dependencies=[Depends(require_admin)],
+)
+def get_artifact(
+    app_id: StableId,
+    federation_id: StableId,
+    digest: Digest,
+    db: Annotated[Database, Depends(get_database)],
+    artifacts: Annotated[S3ArtifactStore, Depends(get_artifact_store)],
+) -> dict[str, Any]:
+    try:
+        artifact = db.get_artifact(app_id, federation_id, digest)
+        artifact["download_url"] = artifacts.download_url(artifact.pop("storage_key"))
+        return artifact
+    except (ConflictError, NotFoundError, ForbiddenError) as exc:
+        map_store_error(exc)
+    except ArtifactStoreError as exc:
+        fail(502, "E_ARTIFACT_STORE", str(exc))
+
+
+@app.post(
     "/admin/v1/apps/{app_id}/federations/{federation_id}/releases",
     status_code=201,
     dependencies=[Depends(require_admin)],
@@ -468,40 +582,15 @@ def submit_artifact(
     except (ConflictError, NotFoundError, ForbiddenError) as exc:
         map_store_error(exc)
 
-    if descriptor.media_type != policy["media_type"]:
-        fail(400, "E_MEDIA_TYPE", "descriptor media_type does not match ArtifactType")
-    if content.content_type and content.content_type != descriptor.media_type:
-        fail(400, "E_MEDIA_TYPE", "upload content type does not match descriptor")
-    try:
-        Draft202012Validator(policy["metadata_schema"]).validate(descriptor.metadata)
-    except JsonSchemaValidationError as exc:
-        fail(400, "E_BAD_METADATA", exc.message)
-
-    if descriptor.size_bytes > settings.max_artifact_bytes:
-        fail(413, "E_ARTIFACT_TOO_LARGE", "artifact exceeds configured upload limit")
-    digest = hashlib.sha256()
-    actual_size = 0
-    content.file.seek(0)
-    while chunk := content.file.read(1024 * 1024):
-        actual_size += len(chunk)
-        if actual_size > settings.max_artifact_bytes:
-            fail(413, "E_ARTIFACT_TOO_LARGE", "artifact exceeds configured upload limit")
-        digest.update(chunk)
-    actual_digest = "sha256:" + digest.hexdigest()
-    if actual_size != descriptor.size_bytes or actual_digest != descriptor.digest:
-        fail(400, "E_DIGEST", "artifact size or digest verification failed")
-
-    try:
-        storage_key = artifacts.put_file(
-            app_id=app_id,
-            federation_id=federation_id,
-            digest=descriptor.digest,
-            size_bytes=descriptor.size_bytes,
-            media_type=descriptor.media_type,
-            file=content.file,
-        )
-    except ArtifactStoreError as exc:
-        fail(502, "E_ARTIFACT_STORE", str(exc))
+    storage_key = store_artifact_upload(
+        app_id=app_id,
+        federation_id=federation_id,
+        descriptor=descriptor,
+        content=content,
+        policy=policy,
+        settings=settings,
+        artifacts=artifacts,
+    )
 
     descriptor_data = descriptor.model_dump(by_alias=True, mode="json")
     try:

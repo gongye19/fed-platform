@@ -379,15 +379,136 @@ class Database:
             ).fetchone()
             if not membership or not membership["can_submit"]:
                 raise ForbiddenError("site cannot submit to this federation")
-            artifact_type = conn.execute(
-                """SELECT media_type, purpose, schema_digest, metadata_schema
-                   FROM artifact_types
-                   WHERE app_id = %s AND type_name = %s AND format_version = %s""",
-                (app_id, type_name, format_version),
+            return self._artifact_policy(conn, app_id, federation_id, type_name, format_version)
+
+    def artifact_policy(
+        self,
+        app_id: str,
+        federation_id: str,
+        type_name: str,
+        format_version: int,
+    ) -> dict[str, Any]:
+        with self.connection() as conn:
+            return self._artifact_policy(conn, app_id, federation_id, type_name, format_version)
+
+    @staticmethod
+    def _artifact_policy(
+        conn: psycopg.Connection,
+        app_id: str,
+        federation_id: str,
+        type_name: str,
+        format_version: int,
+    ) -> dict[str, Any]:
+        artifact_type = conn.execute(
+            """SELECT at.media_type, at.purpose, at.schema_digest, at.metadata_schema
+               FROM artifact_types at
+               JOIN federations f ON f.app_id = at.app_id
+               WHERE at.app_id = %s AND f.federation_id = %s
+                 AND f.disabled_at IS NULL
+                 AND at.type_name = %s AND at.format_version = %s""",
+            (app_id, federation_id, type_name, format_version),
+        ).fetchone()
+        if not artifact_type:
+            raise NotFoundError("federation or artifact type not registered")
+        return artifact_type
+
+    @staticmethod
+    def _upsert_artifact(
+        conn: psycopg.Connection,
+        app_id: str,
+        federation_id: str,
+        descriptor: dict[str, Any],
+        storage_key: str,
+    ) -> tuple[dict[str, Any], bool]:
+        artifact = conn.execute(
+            """INSERT INTO artifacts
+               (app_id, federation_id, digest, type_name, format_version,
+                media_type, size_bytes, metadata, storage_key)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+               ON CONFLICT (app_id, federation_id, digest) DO NOTHING
+               RETURNING digest, type_name, format_version, media_type, size_bytes,
+                         metadata, storage_key, created_at""",
+            (
+                app_id,
+                federation_id,
+                descriptor["digest"],
+                descriptor["type"],
+                descriptor["format_version"],
+                descriptor["media_type"],
+                descriptor["size_bytes"],
+                Jsonb(descriptor["metadata"]),
+                storage_key,
+            ),
+        ).fetchone()
+        if artifact:
+            return artifact, True
+        artifact = conn.execute(
+            """SELECT digest, type_name, format_version, media_type, size_bytes,
+                      metadata, storage_key, created_at
+               FROM artifacts
+               WHERE app_id = %s AND federation_id = %s AND digest = %s""",
+            (app_id, federation_id, descriptor["digest"]),
+        ).fetchone()
+        expected = {
+            "type_name": descriptor["type"],
+            "format_version": descriptor["format_version"],
+            "media_type": descriptor["media_type"],
+            "size_bytes": descriptor["size_bytes"],
+            "metadata": descriptor["metadata"],
+        }
+        if {key: artifact[key] for key in expected} != expected:
+            raise ConflictError("artifact digest already has another descriptor")
+        return artifact, False
+
+    def create_artifact(
+        self,
+        *,
+        app_id: str,
+        federation_id: str,
+        descriptor: dict[str, Any],
+        storage_key: str,
+    ) -> tuple[dict[str, Any], bool]:
+        with self.connection() as conn:
+            self._artifact_policy(
+                conn,
+                app_id,
+                federation_id,
+                descriptor["type"],
+                descriptor["format_version"],
+            )
+            artifact, created = self._upsert_artifact(
+                conn, app_id, federation_id, descriptor, storage_key
+            )
+            if created:
+                conn.execute(
+                    """INSERT INTO audit_log
+                       (actor_type, actor_id, action, app_id, federation_id,
+                        target_type, target_id, detail)
+                       VALUES ('admin', 'admin', 'artifact.created', %s, %s,
+                               'artifact', %s, %s)""",
+                    (
+                        app_id,
+                        federation_id,
+                        descriptor["digest"],
+                        Jsonb({"type": descriptor["type"]}),
+                    ),
+                )
+            return artifact, created
+
+    def get_artifact(
+        self, app_id: str, federation_id: str, digest: str
+    ) -> dict[str, Any]:
+        with self.connection() as conn:
+            artifact = conn.execute(
+                """SELECT digest, type_name, format_version, media_type, size_bytes,
+                          metadata, storage_key, created_at
+                   FROM artifacts
+                   WHERE app_id = %s AND federation_id = %s AND digest = %s""",
+                (app_id, federation_id, digest),
             ).fetchone()
-            if not artifact_type:
-                raise NotFoundError("artifact type not registered")
-            return artifact_type
+            if not artifact:
+                raise NotFoundError("artifact not found")
+            return artifact
 
     def create_submission(
         self,
@@ -411,41 +532,7 @@ class Database:
             if not membership or not membership["can_submit"]:
                 raise ForbiddenError("site cannot submit to this federation")
 
-            inserted_artifact = conn.execute(
-                """INSERT INTO artifacts
-                   (app_id, federation_id, digest, type_name, format_version,
-                    media_type, size_bytes, metadata, storage_key)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                   ON CONFLICT (app_id, federation_id, digest) DO NOTHING
-                   RETURNING digest""",
-                (
-                    app_id,
-                    federation_id,
-                    descriptor["digest"],
-                    descriptor["type"],
-                    descriptor["format_version"],
-                    descriptor["media_type"],
-                    descriptor["size_bytes"],
-                    Jsonb(descriptor["metadata"]),
-                    storage_key,
-                ),
-            ).fetchone()
-            if not inserted_artifact:
-                existing = conn.execute(
-                    """SELECT type_name, format_version, media_type, size_bytes, metadata
-                       FROM artifacts
-                       WHERE app_id = %s AND federation_id = %s AND digest = %s""",
-                    (app_id, federation_id, descriptor["digest"]),
-                ).fetchone()
-                expected = {
-                    "type_name": descriptor["type"],
-                    "format_version": descriptor["format_version"],
-                    "media_type": descriptor["media_type"],
-                    "size_bytes": descriptor["size_bytes"],
-                    "metadata": descriptor["metadata"],
-                }
-                if existing != expected:
-                    raise ConflictError("artifact digest already has another descriptor")
+            self._upsert_artifact(conn, app_id, federation_id, descriptor, storage_key)
 
             submission_id = uuid.uuid4()
             submission = conn.execute(
@@ -638,12 +725,16 @@ class Database:
                 raise NotFoundError("federation not found")
 
             found_artifacts = conn.execute(
-                """SELECT digest FROM artifacts
-                   WHERE app_id = %s AND federation_id = %s AND digest = ANY(%s)""",
+                """SELECT a.digest FROM artifacts a
+                   JOIN artifact_types at
+                     ON at.app_id = a.app_id AND at.type_name = a.type_name
+                    AND at.format_version = a.format_version
+                   WHERE a.app_id = %s AND a.federation_id = %s
+                     AND a.digest = ANY(%s) AND at.purpose = 'release'""",
                 (app_id, federation_id, artifact_digests),
             ).fetchall()
             if {row["digest"] for row in found_artifacts} != set(artifact_digests):
-                raise NotFoundError("one or more artifacts were not found in this federation")
+                raise NotFoundError("one or more release artifacts were not found in this federation")
 
             params: list[Any] = [app_id, federation_id]
             target_filter = ""
