@@ -257,9 +257,6 @@ function Shell({ path, navigate }: {
                 <button className={selected ? "sidebar-app__name active" : "sidebar-app__name"} onClick={() => navigate(`${base}/overview`)}>
                   <span>{item.display_name}</span><small>{item.current_version}</small>
                 </button>
-                {selected && <div className="sidebar-app__sections" aria-label={`${item.display_name} 导航`}>
-                  {APP_SECTIONS.map(([id, label]) => <button key={id} className={selectedSection === id ? "active" : ""} aria-current={selectedSection === id ? "page" : undefined} onClick={() => navigate(`${base}/${id}`)}>{label}</button>)}
-                </div>}
               </div>;
             })}
           </div>}
@@ -469,7 +466,7 @@ function ApplicationDetail({ appId, section, navigate }: { appId: string; sectio
     <PageHeader eyebrow={`应用 / ${sectionLabel}`} title={app.display_name} meta={`${app.app_id} · v${app.current_version}`} action={<div className="header-actions"><button className="button button--quiet" onClick={() => setMembershipModal(true)} disabled={!topology.federations.length || !sites.length}>配置成员</button><button className="button button--primary" onClick={() => setFederationModal(true)}>新建联邦域</button></div>} />
     <div className="app-state"><Status value={app.status} /><span>Agent</span><Status value={app.agent_status} /><code>{app.core_plugin_id}</code></div>
     {error && <ErrorMessage error={error} />}{notice && <p className="message message--success" role="status">{notice}<button onClick={() => setNotice("")} aria-label="关闭提示">×</button></p>}
-    <div className="mobile-app-nav" aria-label={`${app.display_name} 导航`}>{APP_SECTIONS.map(([id, label]) => <button key={id} className={section === id ? "active" : ""} onClick={() => navigate(`${base}/${id}`)}>{label}</button>)}</div>
+    <nav className="app-nav" aria-label={`${app.display_name} 导航`}>{APP_SECTIONS.map(([id, label]) => <button key={id} className={section === id ? "active" : ""} aria-current={section === id ? "page" : undefined} onClick={() => navigate(`${base}/${id}`)}>{label}</button>)}</nav>
     {section === "overview" && <TopologyView topology={topology} onSelect={(id) => { setFederationId(id); navigate(`${base}/artifacts`); }} />}
     {!["overview", "sites", "timeline", "activity", "contract"].includes(section) && <FederationSwitch items={topology.federations} value={federationId} onChange={setFederationId} />}
     {section === "sites" && <ApplicationSites topology={topology} sites={sites} />}

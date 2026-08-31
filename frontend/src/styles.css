@@ -121,10 +121,6 @@ small { color: var(--muted); }
 .sidebar-app__name span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-app__name small { flex: none; font: 10px/1 "Geist Mono Variable", monospace; }
 .sidebar nav .sidebar-app__name.active { background: rgba(255, 255, 255, .035); border-color: transparent; }
-.sidebar-app__sections { display: grid; gap: 1px; margin: 0 0 5px 10px; padding-left: 8px; }
-.sidebar nav .sidebar-app__sections button { min-height: 31px; padding: 0 10px; color: var(--muted); font-size: 12px; }
-.sidebar nav .sidebar-app__sections button.active { color: var(--ink); background: var(--surface-2); border-color: var(--line); }
-.sidebar nav .sidebar-app__sections button.active::before { position: absolute; top: 9px; bottom: 9px; left: -1px; width: 2px; background: var(--accent); border-radius: 2px; content: ""; }
 .sidebar__foot { display: grid; gap: 8px; margin-top: auto; padding: 16px 8px 0; border-top: 1px solid var(--line); }
 .connection { display: flex; align-items: center; gap: 8px; color: var(--secondary); font-size: 12px; }
 .connection i { width: 6px; height: 6px; background: var(--green); border-radius: 50%; box-shadow: 0 0 0 3px rgba(118, 199, 160, .09); }
@@ -234,7 +230,11 @@ td small { margin-top: 4px; }
 .app-state { display: flex; align-items: center; gap: 12px; max-width: 1320px; margin: -14px auto 26px; color: var(--muted); font-size: 12px; }
 .app-state code, .contract code, .type-row code { color: #a78bfa; }
 .app-state code { padding: 3px 7px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; }
-.mobile-app-nav { display: none; }
+.app-nav { display: flex; gap: 22px; max-width: 1320px; margin: 0 auto 18px; overflow-x: auto; border-bottom: 1px solid var(--line); }
+.app-nav button { position: relative; flex: none; min-height: 42px; padding: 0; color: var(--muted); background: transparent; border: 0; cursor: pointer; transition: color 150ms ease-out; }
+.app-nav button:hover { color: var(--secondary); }
+.app-nav button.active { color: var(--ink); }
+.app-nav button.active::after { position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--accent); content: ""; }
 .federation-switch { display: flex; align-items: center; gap: 12px; max-width: 1320px; margin: 0 auto 12px; }
 .federation-switch > span { color: var(--muted); font: 500 10px/1 "Geist Mono Variable", monospace; letter-spacing: .055em; }
 .federation-switch select { width: auto; min-width: 260px; }
@@ -373,9 +373,7 @@ td small { margin-top: 4px; }
   .sidebar nav button { width: auto; min-height: 40px; padding: 0 12px; }
   .sidebar nav button.active::before { display: none; }
   .content { margin-left: 0; padding: 32px 20px 64px; }
-  .mobile-app-nav { display: flex; gap: 4px; max-width: 1320px; margin: 0 auto 18px; padding-bottom: 6px; overflow-x: auto; border-bottom: 1px solid var(--line); }
-  .mobile-app-nav button { flex: none; min-height: 36px; padding: 0 11px; color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: var(--radius-sm); cursor: pointer; }
-  .mobile-app-nav button.active { color: var(--ink); background: var(--surface-2); border-color: var(--line); }
+  .app-nav { gap: 18px; }
   .ledger { overflow-x: auto; }
   .ledger__head, .ledger__row { min-width: 850px; }
   .topology__branch { grid-template-columns: 210px 1fr; }
