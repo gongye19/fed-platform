@@ -36,8 +36,8 @@ class FakeHarness:
 
 
 def test_restricted_deepseek_core_returns_a_validated_decision():
-    binding = default_agent_binding()
-    config = DeepSeekHarnessCoreConfig.model_validate(binding["config"])
+    assert default_agent_binding()["core_plugin_id"] == "manual"
+    config = DeepSeekHarnessCoreConfig()
     decision = DeepSeekHarnessCore(FakeHarness).handle(
         {
             "job_id": "job-1",

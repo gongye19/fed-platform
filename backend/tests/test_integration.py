@@ -151,19 +151,25 @@ def test_registry_and_artifact_submission(live_stack):
     agent = client.get(
         f"/admin/v1/apps/{app_id}/federations/default/agent", headers=admin
     )
-    assert agent.status_code == 200 and agent.json()["core_plugin_id"] == "deepseek-harness"
+    assert agent.status_code == 200 and agent.json()["core_plugin_id"] == "manual"
     configured = client.put(
         f"/admin/v1/apps/{app_id}/federations/default/agent",
-        json={"core_plugin_id": "manual", "config": {}, "expected_revision": 1},
+        json={"core_plugin_id": "deepseek-harness", "config": {}, "expected_revision": 1},
         headers=admin,
     )
     assert configured.status_code == 200 and configured.json()["revision"] == 2
     stale = client.put(
         f"/admin/v1/apps/{app_id}/federations/default/agent",
-        json={"core_plugin_id": "manual", "config": {}, "expected_revision": 1},
+        json={"core_plugin_id": "deepseek-harness", "config": {}, "expected_revision": 1},
         headers=admin,
     )
     assert stale.status_code == 409
+    configured = client.put(
+        f"/admin/v1/apps/{app_id}/federations/default/agent",
+        json={"core_plugin_id": "manual", "config": {}, "expected_revision": 2},
+        headers=admin,
+    )
+    assert configured.status_code == 200 and configured.json()["revision"] == 3
 
     topology = client.get(f"/admin/v1/apps/{app_id}/topology", headers=admin)
     assert topology.status_code == 200

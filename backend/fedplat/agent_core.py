@@ -114,9 +114,9 @@ def validate_core_config(core_plugin_id: str, config: dict[str, Any]) -> dict[st
 
 def default_agent_binding() -> dict[str, Any]:
     return {
-        "core_plugin_id": DEEPSEEK_CORE_ID,
-        "core_plugin_version": DEEPSEEK_CORE_VERSION,
-        "config": DeepSeekHarnessCoreConfig().model_dump(mode="json"),
+        "core_plugin_id": MANUAL_CORE_ID,
+        "core_plugin_version": MANUAL_CORE_VERSION,
+        "config": ManualCoreConfig().model_dump(mode="json"),
     }
 
 

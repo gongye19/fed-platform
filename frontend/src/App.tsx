@@ -328,11 +328,11 @@ function ApplicationsPage({ navigate }: { navigate: (path: string) => void }) {
       </div>
       {error && <ErrorMessage error={error} />}
       <section className="ledger" aria-busy={loading}>
-        <div className="ledger__head"><span>APPLICATION</span><span>AGENT CORE</span><span>FEDERATIONS</span><span>SITES</span><span>STATE</span></div>
+        <div className="ledger__head"><span>APPLICATION</span><span>AGENT</span><span>FEDERATIONS</span><span>SITES</span><span>STATE</span></div>
         {!loading && visible.length === 0 ? <Empty>没有匹配的应用。注册第一个 FedApp Manifest 后，平台会同时创建它的 Agent。</Empty> : visible.map((item) => (
           <button className="ledger__row" key={item.app_id} onClick={() => navigate(`/apps/${encodeURIComponent(item.app_id)}/overview`)}>
             <span><strong>{item.display_name}</strong><small className="mono">{item.app_id} · v{item.current_version}</small></span>
-            <span><Status value={item.agent_status} /><small className="mono">{item.core_plugin_id}</small></span>
+            <span><Status value={item.agent_status} /></span>
             <span className="ledger__number">{item.federation_count}</span>
             <span className="ledger__number">{item.site_count}</span>
             <span><Status value={item.status} /></span>
@@ -416,7 +416,7 @@ function ApplicationDetail({ appId, section, navigate }: { appId: string; sectio
   const base = `/apps/${encodeURIComponent(appId)}`;
   return <>
     <PageHeader eyebrow={`应用 / ${sectionLabel}`} title={app.display_name} meta={`${app.app_id} · v${app.current_version}`} />
-    <div className="app-state"><Status value={app.status} /><span>Agent</span><Status value={app.agent_status} /><code>{app.core_plugin_id}</code></div>
+    <div className="app-state"><Status value={app.status} /><span>Agent</span><Status value={app.agent_status} /></div>
     {error && <ErrorMessage error={error} />}
     <nav className="app-nav" aria-label={`${app.display_name} 导航`}>{APP_SECTIONS.map(([id, label]) => <button key={id} className={section === id ? "active" : ""} aria-current={section === id ? "page" : undefined} onClick={() => navigate(`${base}/${id}`)}>{label}</button>)}</nav>
     {section === "overview" && <ApplicationSites topology={topology} />}

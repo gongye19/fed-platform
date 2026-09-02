@@ -31,7 +31,7 @@
 - Application、拓扑、工件、发布、站点和应用级活动管理 API；
 - 可独立部署的 React 管理控制台，应用内横向展示概览、版本、效果、时间线和日志。
 
-旧 SQLite `Update / Digest / Plugin` spike 已删除，不提供兼容接口。DeepSeek Harness Agent Core 与 `manual` 回退已实现；Worker 可按域调用已安装、已版本化的联邦算法插件，输出仍是应用自定义 Artifact。
+旧 SQLite `Update / Digest / Plugin` spike 已删除，不提供兼容接口。每个联邦域默认按需运行 Agent；Worker 可调用已安装、已版本化的联邦算法插件，输出仍是应用自定义 Artifact。需要自主决策时可单独配置 DeepSeek Harness Agent Core。
 
 ## 仓库结构
 
