@@ -10,6 +10,8 @@ export type EvaluationRow = {
   siteId: string;
   baseline: number | null;
   candidate: number | null;
+  retrievalCases: number | null;
+  sampleSize: number | null;
   createdAt: string;
 };
 
@@ -24,10 +26,14 @@ export function groupEvaluationResults(items: EvaluationInput[]) {
       siteId: item.site_id,
       baseline: null,
       candidate: null,
+      retrievalCases: null,
+      sampleSize: null,
       createdAt: item.created_at,
     };
     if (typeof item.metadata.baseline_accuracy === "number") row.baseline = item.metadata.baseline_accuracy;
     if (typeof item.metadata.candidate_accuracy === "number") row.candidate = item.metadata.candidate_accuracy;
+    if (typeof item.metadata.retrieval_cases === "number") row.retrievalCases = item.metadata.retrieval_cases;
+    if (typeof item.metadata.sample_size === "number") row.sampleSize = item.metadata.sample_size;
     if (item.created_at > row.createdAt) row.createdAt = item.created_at;
     grouped.set(key, row);
   }
