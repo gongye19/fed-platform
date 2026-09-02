@@ -154,13 +154,13 @@ def test_registry_and_artifact_submission(live_stack):
     assert agent.status_code == 200 and agent.json()["core_plugin_id"] == "deepseek-harness"
     configured = client.put(
         f"/admin/v1/apps/{app_id}/federations/default/agent",
-        json={"core_plugin_id": "manual-channel", "config": {}, "expected_revision": 1},
+        json={"core_plugin_id": "manual", "config": {}, "expected_revision": 1},
         headers=admin,
     )
     assert configured.status_code == 200 and configured.json()["revision"] == 2
     stale = client.put(
         f"/admin/v1/apps/{app_id}/federations/default/agent",
-        json={"core_plugin_id": "manual-channel", "config": {}, "expected_revision": 1},
+        json={"core_plugin_id": "manual", "config": {}, "expected_revision": 1},
         headers=admin,
     )
     assert stale.status_code == 409
@@ -201,7 +201,6 @@ def test_registry_and_artifact_submission(live_stack):
             **site_auth,
             "Idempotency-Key": "wrong-app",
             "X-App-Version": "1.0.0",
-            "X-Federation-Version": "none",
         },
     )
     assert cross_app.status_code == 401
@@ -214,13 +213,12 @@ def test_registry_and_artifact_submission(live_stack):
             **site_auth,
             "Idempotency-Key": "bad-version",
             "X-App-Version": "9.9.9",
-            "X-Federation-Version": "none",
         },
     )
     assert unregistered_version.status_code == 409
     assert client.get("/admin/v1/sites", headers=admin).json()["items"] == []
 
-    def upload(idempotency_key: str, federation_version: str = "none"):
+    def upload(idempotency_key: str):
         return client.post(
             f"/site/v1/apps/{app_id}/artifacts",
             data={"descriptor": json.dumps(descriptor)},
@@ -229,7 +227,6 @@ def test_registry_and_artifact_submission(live_stack):
                 **site_auth,
                 "Idempotency-Key": idempotency_key,
                 "X-App-Version": "1.0.0",
-                "X-Federation-Version": federation_version,
             },
         )
 
@@ -341,11 +338,20 @@ def test_registry_and_artifact_submission(live_stack):
         headers=site_auth,
     ).json()["delivery_state"] == "active"
 
-    reported = upload("reported-version", release_id)
-    assert reported.status_code == 201
+    reported = client.put(
+        f"/site/v1/apps/{app_id}/status",
+        json={"app_version": "1.0.0", "active_release_id": release_id},
+        headers=site_auth,
+    )
+    assert reported.status_code == 200
+    assert reported.json()["active_release_id"] == release_id
     topology = client.get(f"/admin/v1/apps/{app_id}/topology", headers=admin).json()
     assert topology["memberships"][0]["reported_release_id"] == release_id
     assert topology["memberships"][0]["federation_version_reported_at"]
+
+    assert upload("post-status-evaluation").status_code == 201
+    topology = client.get(f"/admin/v1/apps/{app_id}/topology", headers=admin).json()
+    assert topology["memberships"][0]["reported_release_id"] == release_id
 
     rollback = client.post(
         f"/admin/v1/apps/{app_id}/federations/default/releases/{release_id}/rollback",
@@ -369,14 +375,14 @@ def test_registry_and_artifact_submission(live_stack):
     )
 
     job = database.claim_agent_job("integration-worker")
-    assert job and job["app_id"] == app_id and job["core_plugin_id"] == "manual-channel"
+    assert job and job["app_id"] == app_id and job["core_plugin_id"] == "manual"
     assert job["kind"] == "evaluation.received"
     assert job["payload"]["artifact_purpose"] == "evaluation"
     result = {
         "new_state": {"handled": 1},
         "intents": [{"kind": "wait", "payload": {}}],
         "evidence": {},
-        "core_plugin_id": "manual-channel",
+        "core_plugin_id": "manual",
         "core_plugin_version": "1.0.0",
     }
     database.finish_agent_job(

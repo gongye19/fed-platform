@@ -31,7 +31,7 @@
 - Application、拓扑、工件、发布、站点和应用级活动管理 API；
 - 可独立部署的 React 管理控制台，应用内横向展示概览、版本、效果、时间线和日志。
 
-旧 SQLite `Update / Digest / Plugin` spike 已删除，不提供兼容接口。DeepSeek Harness Agent Core 与 `manual-channel` 回退已实现；Worker 可按域调用已安装、已版本化的联邦算法插件，输出仍是应用自定义 Artifact。
+旧 SQLite `Update / Digest / Plugin` spike 已删除，不提供兼容接口。DeepSeek Harness Agent Core 与 `manual` 回退已实现；Worker 可按域调用已安装、已版本化的联邦算法插件，输出仍是应用自定义 Artifact。
 
 ## 仓库结构
 
@@ -91,7 +91,8 @@ GET  /admin/v1/apps/{app_id}/federations/{federation_id}/releases
 GET  /admin/v1/apps/{app_id}/federations/{federation_id}/releases/{release_id}
 POST /admin/v1/apps/{app_id}/federations/{federation_id}/releases/{release_id}/{stage|activate|rollback}
 
-POST /site/v1/apps/{app_id}/artifacts  # Authorization + Idempotency-Key + X-App-Version + X-Federation-Version
+POST /site/v1/apps/{app_id}/artifacts  # Authorization + Idempotency-Key + X-App-Version
+PUT  /site/v1/apps/{app_id}/status     # 独立上报应用版本和当前采用的联邦版本
 GET  /site/v1/apps/{app_id}/commands
 POST /site/v1/apps/{app_id}/commands/{command_id}/ack
 ```

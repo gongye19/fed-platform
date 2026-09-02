@@ -402,7 +402,6 @@ class Database:
         app_version: str,
         type_name: str,
         format_version: int,
-        reported_release_id: uuid.UUID | None,
     ) -> dict[str, Any]:
         with self.connection() as conn:
             if not conn.execute(
@@ -412,15 +411,91 @@ class Database:
             ).fetchone():
                 raise ConflictError("site application version is not registered")
             federation_id = self._app_federation(conn, app_id)
-            if reported_release_id and not conn.execute(
-                """SELECT 1 FROM releases
-                   WHERE release_id = %s AND app_id = %s AND federation_id = %s""",
-                (reported_release_id, app_id, federation_id),
-            ).fetchone():
-                raise ConflictError("reported federation version does not belong to this application")
             return {
                 **self._artifact_policy(conn, app_id, federation_id, type_name, format_version),
                 "federation_id": federation_id,
+            }
+
+    def report_site_status(
+        self,
+        *,
+        app_id: str,
+        site_id: str,
+        display_name: str,
+        app_version: str,
+        active_release_id: uuid.UUID | None,
+    ) -> dict[str, Any]:
+        with self.connection() as conn:
+            if not conn.execute(
+                """SELECT 1 FROM application_versions
+                   WHERE app_id = %s AND app_version = %s""",
+                (app_id, app_version),
+            ).fetchone():
+                raise ConflictError("site application version is not registered")
+            federation_id = self._app_federation(conn, app_id)
+            previous = conn.execute(
+                """SELECT reported_release_id FROM memberships
+                   WHERE app_id = %s AND federation_id = %s AND site_id = %s
+                     AND ended_at IS NULL""",
+                (app_id, federation_id, site_id),
+            ).fetchone()
+            if not previous:
+                raise NotFoundError("site membership is created by its first artifact upload")
+            if active_release_id and not conn.execute(
+                """SELECT 1 FROM releases
+                   WHERE release_id = %s AND app_id = %s AND federation_id = %s""",
+                (active_release_id, app_id, federation_id),
+            ).fetchone():
+                raise ConflictError("active release does not belong to this application")
+            conn.execute(
+                """UPDATE sites SET display_name = %s, last_seen_at = now()
+                   WHERE site_id = %s""",
+                (display_name, site_id),
+            )
+            membership = conn.execute(
+                """UPDATE memberships
+                   SET app_version = %s, last_seen_at = now(),
+                       reported_release_id = %s,
+                       federation_version_reported_at = now()
+                   WHERE app_id = %s AND federation_id = %s AND site_id = %s
+                   RETURNING app_version, reported_release_id,
+                             federation_version_reported_at""",
+                (app_version, active_release_id, app_id, federation_id, site_id),
+            ).fetchone()
+            if previous["reported_release_id"] != active_release_id:
+                conn.execute(
+                    """INSERT INTO audit_log
+                       (actor_type, actor_id, action, app_id, federation_id, site_id,
+                        target_type, target_id, detail)
+                       VALUES ('site', %s, 'site.version.reported', %s, %s, %s,
+                               'release', %s, %s)""",
+                    (
+                        site_id,
+                        app_id,
+                        federation_id,
+                        site_id,
+                        str(active_release_id) if active_release_id else "none",
+                        Jsonb({
+                            "previous_release_id": (
+                                str(previous["reported_release_id"])
+                                if previous["reported_release_id"] else None
+                            ),
+                            "reported_release_id": (
+                                str(active_release_id) if active_release_id else None
+                            ),
+                        }),
+                    ),
+                )
+            return {
+                "app_id": app_id,
+                "federation_id": federation_id,
+                "site_id": site_id,
+                "app_version": membership["app_version"],
+                "active_release_id": (
+                    str(membership["reported_release_id"])
+                    if membership["reported_release_id"] else None
+                ),
+                "reported_at": membership["federation_version_reported_at"],
             }
 
     @staticmethod
@@ -687,7 +762,6 @@ class Database:
         site_id: str,
         display_name: str,
         app_version: str,
-        reported_release_id: uuid.UUID | None,
         descriptor: dict[str, Any],
         artifact_purpose: str,
         storage_key: str,
@@ -708,28 +782,24 @@ class Database:
                    VALUES (%s, %s, now())
                    ON CONFLICT (site_id) DO UPDATE
                    SET display_name = EXCLUDED.display_name,
-                       last_seen_at = now(),
-                       disabled_at = NULL""",
+                       last_seen_at = now(), disabled_at = NULL""",
                 (site_id, display_name),
             )
             membership = conn.execute(
-                """SELECT reported_release_id FROM memberships
+                """SELECT 1 FROM memberships
                    WHERE app_id = %s AND federation_id = %s AND site_id = %s""",
                 (app_id, federation_id, site_id),
             ).fetchone()
             conn.execute(
                 """INSERT INTO memberships
                    (app_id, federation_id, site_id, can_submit, can_receive,
-                    can_execute_task, app_version, last_seen_at,
-                    reported_release_id, federation_version_reported_at)
-                   VALUES (%s, %s, %s, true, true, false, %s, now(), %s, now())
+                    can_execute_task, app_version, last_seen_at)
+                   VALUES (%s, %s, %s, true, true, false, %s, now())
                    ON CONFLICT (app_id, federation_id, site_id) DO UPDATE
                    SET can_submit = true, can_receive = true,
                        app_version = EXCLUDED.app_version,
-                       last_seen_at = now(), ended_at = NULL,
-                       reported_release_id = EXCLUDED.reported_release_id,
-                       federation_version_reported_at = now()""",
-                (app_id, federation_id, site_id, app_version, reported_release_id),
+                       last_seen_at = now(), ended_at = NULL""",
+                (app_id, federation_id, site_id, app_version),
             )
             if not membership:
                 conn.execute(
@@ -744,36 +814,7 @@ class Database:
                         federation_id,
                         site_id,
                         site_id,
-                        Jsonb({
-                            "app_version": app_version,
-                            "reported_release_id": (
-                                str(reported_release_id) if reported_release_id else None
-                            ),
-                        }),
-                    ),
-                )
-            elif membership["reported_release_id"] != reported_release_id:
-                conn.execute(
-                    """INSERT INTO audit_log
-                       (actor_type, actor_id, action, app_id, federation_id, site_id,
-                        target_type, target_id, detail)
-                       VALUES ('site', %s, 'site.version.reported', %s, %s, %s,
-                               'release', %s, %s)""",
-                    (
-                        site_id,
-                        app_id,
-                        federation_id,
-                        site_id,
-                        str(reported_release_id) if reported_release_id else "none",
-                        Jsonb({
-                            "previous_release_id": (
-                                str(membership["reported_release_id"])
-                                if membership["reported_release_id"] else None
-                            ),
-                            "reported_release_id": (
-                                str(reported_release_id) if reported_release_id else None
-                            ),
-                        }),
+                        Jsonb({"app_version": app_version, "reported_release_id": None}),
                     ),
                 )
 

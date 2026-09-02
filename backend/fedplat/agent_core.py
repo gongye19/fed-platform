@@ -11,7 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 DEEPSEEK_CORE_ID = "deepseek-harness"
 DEEPSEEK_CORE_VERSION = "0.1.1rc1"
-MANUAL_CORE_ID = "manual-channel"
+MANUAL_CORE_ID = "manual"
+LEGACY_MANUAL_CORE_ID = "manual-channel"
 MANUAL_CORE_VERSION = "1.0.0"
 MAX_DECISION_BYTES = 512 * 1024
 _HIDDEN_CHILD_ENV = (
@@ -75,7 +76,7 @@ class DeepSeekHarnessCoreConfig(BaseModel):
     memory: PlatformMemoryConfig = Field(default_factory=PlatformMemoryConfig)
 
 
-class ManualChannelConfig(BaseModel):
+class ManualCoreConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
@@ -87,6 +88,7 @@ def core_version(core_plugin_id: str) -> str:
     versions = {
         DEEPSEEK_CORE_ID: DEEPSEEK_CORE_VERSION,
         MANUAL_CORE_ID: MANUAL_CORE_VERSION,
+        LEGACY_MANUAL_CORE_ID: MANUAL_CORE_VERSION,
     }
     try:
         return versions[core_plugin_id]
@@ -97,7 +99,8 @@ def core_version(core_plugin_id: str) -> str:
 def validate_core_config(core_plugin_id: str, config: dict[str, Any]) -> dict[str, Any]:
     schemas: dict[str, type[BaseModel]] = {
         DEEPSEEK_CORE_ID: DeepSeekHarnessCoreConfig,
-        MANUAL_CORE_ID: ManualChannelConfig,
+        MANUAL_CORE_ID: ManualCoreConfig,
+        LEGACY_MANUAL_CORE_ID: ManualCoreConfig,
     }
     try:
         schema = schemas[core_plugin_id]
@@ -117,11 +120,11 @@ def default_agent_binding() -> dict[str, Any]:
     }
 
 
-class ManualChannelCore:
+class ManualCore:
     def handle(self, job: dict[str, Any], config: BaseModel) -> AgentDecision:
         return AgentDecision(
             new_state=job["state"],
-            intents=[AgentIntent(kind="wait", payload={"reason": "manual-channel"})],
+            intents=[AgentIntent(kind="wait", payload={"reason": "manual"})],
             evidence={"core": MANUAL_CORE_ID},
         )
 
@@ -181,8 +184,8 @@ def run_agent_core(job: dict[str, Any]) -> AgentDecision:
     if core_plugin_id == DEEPSEEK_CORE_ID:
         config = DeepSeekHarnessCoreConfig.model_validate(normalized)
         return DeepSeekHarnessCore().handle(job, config)
-    config = ManualChannelConfig.model_validate(normalized)
-    return ManualChannelCore().handle(job, config)
+    config = ManualCoreConfig.model_validate(normalized)
+    return ManualCore().handle(job, config)
 
 
 def _parse_decision(raw: str, max_state_bytes: int) -> AgentDecision:

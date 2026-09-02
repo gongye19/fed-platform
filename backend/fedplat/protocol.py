@@ -106,6 +106,13 @@ class AppSiteKeyCreate(BaseModel):
     display_name: str = Field(min_length=1, max_length=160)
 
 
+class SiteStatusReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    app_version: Version
+    active_release_id: UUID | None = None
+
+
 class AgentConfigurationUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
