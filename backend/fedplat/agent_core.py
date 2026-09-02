@@ -169,7 +169,11 @@ class DeepSeekHarnessCore:
 
 
 def run_agent_core(job: dict[str, Any]) -> AgentDecision:
-    if job["kind"] == "generation.requested":
+    core_plugin_id = job["core_plugin_id"]
+    if job["kind"] == "generation.requested" and core_plugin_id in {
+        MANUAL_CORE_ID,
+        LEGACY_MANUAL_CORE_ID,
+    }:
         return AgentDecision(
             new_state={
                 **job["state"],
@@ -179,7 +183,6 @@ def run_agent_core(job: dict[str, Any]) -> AgentDecision:
             intents=[AgentIntent(kind="run_algorithm", payload=job["payload"])],
             evidence={"policy": "explicit-generation-request"},
         )
-    core_plugin_id = job["core_plugin_id"]
     normalized = validate_core_config(core_plugin_id, job["config"])
     if core_plugin_id == DEEPSEEK_CORE_ID:
         config = DeepSeekHarnessCoreConfig.model_validate(normalized)
