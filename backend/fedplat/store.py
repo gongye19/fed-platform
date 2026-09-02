@@ -86,14 +86,21 @@ class Database:
                    ON CONFLICT (app_id, federation_id) DO NOTHING""",
                 (app_id, manifest["display_name"], app_id),
             )
+            federation_id = conn.execute(
+                """SELECT federation_id FROM federations
+                   WHERE app_id = %s AND disabled_at IS NULL
+                   ORDER BY federation_id LIMIT 1""",
+                (app_id,),
+            ).fetchone()["federation_id"]
             conn.execute(
                 """INSERT INTO federation_agents
                    (app_id, federation_id, core_plugin_id, core_plugin_version, config,
                     algorithm_plugin_id, algorithm_plugin_version, algorithm_config)
-                   VALUES (%s, 'default', %s, %s, %s, %s, %s, %s)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                    ON CONFLICT (app_id, federation_id) DO NOTHING""",
                 (
                     app_id,
+                    federation_id,
                     agent_binding["core_plugin_id"],
                     agent_binding["core_plugin_version"],
                     Jsonb(agent_binding["config"]),

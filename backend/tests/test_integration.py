@@ -121,8 +121,33 @@ def test_registry_and_artifact_submission(live_stack):
     assert first_app.status_code == 201 and first_app.json()["created"] is True
     repeated_app = client.post("/admin/v1/apps", json=manifest, headers=admin)
     assert repeated_app.status_code == 200 and repeated_app.json()["created"] is False
+
+    legacy_manifest = {**manifest, "app_id": f"{app_id}.legacy"}
+    assert client.post("/admin/v1/apps", json=legacy_manifest, headers=admin).status_code == 201
+    with database.connection() as conn:
+        conn.execute(
+            "INSERT INTO federations (app_id, federation_id, display_name) VALUES (%s, 'custom', 'Custom')",
+            (legacy_manifest["app_id"],),
+        )
+        conn.execute(
+            "UPDATE federation_agents SET federation_id = 'custom' WHERE app_id = %s",
+            (legacy_manifest["app_id"],),
+        )
+        conn.execute(
+            "DELETE FROM federations WHERE app_id = %s AND federation_id = 'default'",
+            (legacy_manifest["app_id"],),
+        )
+    legacy_v2 = {**legacy_manifest, "app_version": "2.0.0"}
+    assert client.post("/admin/v1/apps", json=legacy_v2, headers=admin).status_code == 201
+    assert client.get(
+        f"/admin/v1/apps/{legacy_manifest['app_id']}/federations/custom/agent", headers=admin
+    ).status_code == 200
+
     apps = client.get("/admin/v1/apps", headers=admin)
-    assert apps.status_code == 200 and apps.json()["items"][0]["app_id"] == app_id
+    assert apps.status_code == 200 and {item["app_id"] for item in apps.json()["items"]} >= {
+        app_id,
+        legacy_manifest["app_id"],
+    }
     agent = client.get(
         f"/admin/v1/apps/{app_id}/federations/default/agent", headers=admin
     )
