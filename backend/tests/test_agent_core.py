@@ -109,3 +109,22 @@ def test_explicit_generation_request_reaches_a_configured_agent(monkeypatch):
     )
 
     assert seen == ["generation.requested"]
+
+
+def test_record_only_events_do_not_spend_an_agent_turn(monkeypatch):
+    monkeypatch.setattr(
+        DeepSeekHarnessCore,
+        "handle",
+        lambda *_: pytest.fail("record-only events must not call the model"),
+    )
+
+    decision = run_agent_core(
+        {
+            "core_plugin_id": "deepseek-harness",
+            "kind": "submission.accepted",
+            "state": {"kept": True},
+        }
+    )
+
+    assert decision.new_state == {"kept": True}
+    assert decision.intents[0].kind == "wait"

@@ -170,6 +170,12 @@ class DeepSeekHarnessCore:
 
 def run_agent_core(job: dict[str, Any]) -> AgentDecision:
     core_plugin_id = job["core_plugin_id"]
+    if job["kind"] in {"submission.accepted", "evaluation.received"}:
+        return AgentDecision(
+            new_state=job["state"],
+            intents=[AgentIntent(kind="wait", payload={"reason": "event-recorded"})],
+            evidence={"policy": "event-recorded"},
+        )
     if job["kind"] == "generation.requested" and core_plugin_id in {
         MANUAL_CORE_ID,
         LEGACY_MANUAL_CORE_ID,
