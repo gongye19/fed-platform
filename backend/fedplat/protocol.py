@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from typing import Annotated, Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
@@ -65,12 +66,27 @@ class TaskTypeSpec(BaseModel):
         return self
 
 
+class FederationAlgorithmSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    plugin_id: StableId
+    plugin_version: Version
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class FederationSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    algorithm: FederationAlgorithmSpec | None = None
+
+
 class FedAppManifest(BaseModel):
     schema_version: Literal["fedapp/v1"]
     app_id: StableId
     app_version: Version
     display_name: str = Field(min_length=1, max_length=160)
     adapter_protocol: str = Field(min_length=1, max_length=64)
+    federation: FederationSpec = Field(default_factory=FederationSpec)
     artifact_types: list[ArtifactTypeSpec] = Field(default_factory=list)
     task_types: list[TaskTypeSpec] = Field(default_factory=list)
 
@@ -96,6 +112,28 @@ class AgentConfigurationUpdate(BaseModel):
     core_plugin_id: StableId
     config: dict[str, Any] = Field(default_factory=dict)
     expected_revision: int = Field(ge=1)
+
+
+class AlgorithmConfigurationUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    plugin_id: StableId
+    plugin_version: Version
+    config: dict[str, Any] = Field(default_factory=dict)
+    expected_revision: int = Field(ge=1)
+
+
+class FederationGenerationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    round_id: StableId
+    submission_ids: list[UUID] = Field(min_length=1, max_length=10_000)
+
+    @model_validator(mode="after")
+    def unique_submissions(self) -> FederationGenerationRequest:
+        if len(self.submission_ids) != len(set(self.submission_ids)):
+            raise ValueError("submission_ids must be unique")
+        return self
 
 
 class ArtifactDescriptor(BaseModel):

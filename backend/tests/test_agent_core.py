@@ -1,5 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
+import uuid
 
 import pytest
 
@@ -9,6 +10,7 @@ from fedplat.agent_core import (
     DeepSeekHarnessCoreConfig,
     default_agent_binding,
     validate_core_config,
+    run_agent_core,
 )
 
 
@@ -66,3 +68,22 @@ def test_agent_core_configuration_and_state_are_bounded():
         validate_core_config("unknown", {})
     with pytest.raises(AgentCoreError, match="max_state_bytes"):
         validate_core_config("deepseek-harness", {"memory": {"max_state_bytes": 1}})
+
+
+def test_explicit_generation_request_runs_the_domain_algorithm_without_llm():
+    submissions = [str(uuid.uuid4()), str(uuid.uuid4())]
+    decision = run_agent_core(
+        {
+            "kind": "generation.requested",
+            "payload": {
+                "round_id": "round-1",
+                "submission_ids": submissions,
+                "agent_config_revision": 1,
+            },
+            "state": {},
+        }
+    )
+
+    assert decision.intents[0].kind == "run_algorithm"
+    assert decision.intents[0].payload["submission_ids"] == submissions
+    assert decision.new_state["last_generation_round"] == "round-1"

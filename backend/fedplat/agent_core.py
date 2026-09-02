@@ -166,6 +166,16 @@ class DeepSeekHarnessCore:
 
 
 def run_agent_core(job: dict[str, Any]) -> AgentDecision:
+    if job["kind"] == "generation.requested":
+        return AgentDecision(
+            new_state={
+                **job["state"],
+                "last_generation_round": job["payload"]["round_id"],
+                "last_generation_submission_ids": job["payload"]["submission_ids"],
+            },
+            intents=[AgentIntent(kind="run_algorithm", payload=job["payload"])],
+            evidence={"policy": "explicit-generation-request"},
+        )
     core_plugin_id = job["core_plugin_id"]
     normalized = validate_core_config(core_plugin_id, job["config"])
     if core_plugin_id == DEEPSEEK_CORE_ID:
@@ -197,6 +207,12 @@ def _agent_prompt(job: dict[str, Any], instructions: str) -> str:
         "federation_id": job["federation_id"],
         "event": {"kind": job["kind"], "payload": job["payload"]},
         "agent_state": job["state"],
+        "federation_algorithm": {
+            "plugin_id": job.get("algorithm_plugin_id"),
+            "plugin_version": job.get("algorithm_plugin_version"),
+            "config": job.get("algorithm_config", {}),
+            "state": job.get("algorithm_state", {}),
+        },
         "application_instructions": instructions,
     }
     return (

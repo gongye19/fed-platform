@@ -40,9 +40,8 @@ schema 约束后的可检索 metadata 和 storage key。这样 JSON 与大模型
 ## 2. 数据关系
 
 ```text
-Application ──1:1── AppFederationAgent
-     │
-     ├──1:1── Federation ──1:N── Site
+Application ──1:1── Federation ──1:1── FederationAgent
+                              └──1:N── Site
      │                         via Membership
      │
      ├──1:N── ArtifactType / TaskType
@@ -84,7 +83,7 @@ Application 中重复，但它们在主键、外键、查询和对象存储路�
 |---|---|---|
 | `applications` | app_id、名称、当前版本、状态 | `app_id` 主键 |
 | `application_versions` | 不可变 FedApp Manifest 与 digest | `(app_id, app_version)` 唯一 |
-| `app_agents` | 每个应用一个 Agent、状态、配置 revision | `app_id` 主键 |
+| `federation_agents` | 每个域一个 Agent、算法绑定、独立状态与配置 revision | `(app_id, federation_id)` 主键 |
 | `sites` | 首次上传后出现的全局 Site、last_seen_at、状态 | `site_id` 主键 |
 | `app_site_credentials` | app/site 绑定、token prefix、SHA-256 hash、到期/撤销时间 | 不保存明文 token |
 | `federations` | 应用唯一 Federation、名称、状态 | 每个 app 只有一个 active 行 |
@@ -217,7 +216,7 @@ v1 只在同一个 `(app_id, federation_id)` 内去重，不做跨 Application �
 ```text
 applications
 application_versions
-app_agents（manual-channel）
+federation_agents（默认 DeepSeek Harness，可回退 manual-channel）
 audit_log
 ```
 
@@ -231,7 +230,7 @@ Artifact bytes 已验证存在后，同一事务写入：
 artifacts              INSERT；digest 已存在则比对不可变描述
 submissions            idempotency key 防重复
 events                 submission.accepted
-agent_jobs              唤醒对应 AppFederationAgent
+agent_jobs              唤醒对应 FederationAgent
 ```
 
 已有 digest 的 type、format version、media type、size 或 metadata 不一致时必须拒绝；只有描述完全一致

@@ -123,16 +123,18 @@ def test_registry_and_artifact_submission(live_stack):
     assert repeated_app.status_code == 200 and repeated_app.json()["created"] is False
     apps = client.get("/admin/v1/apps", headers=admin)
     assert apps.status_code == 200 and apps.json()["items"][0]["app_id"] == app_id
-    agent = client.get(f"/admin/v1/apps/{app_id}/agent", headers=admin)
+    agent = client.get(
+        f"/admin/v1/apps/{app_id}/federations/default/agent", headers=admin
+    )
     assert agent.status_code == 200 and agent.json()["core_plugin_id"] == "deepseek-harness"
     configured = client.put(
-        f"/admin/v1/apps/{app_id}/agent",
+        f"/admin/v1/apps/{app_id}/federations/default/agent",
         json={"core_plugin_id": "manual-channel", "config": {}, "expected_revision": 1},
         headers=admin,
     )
     assert configured.status_code == 200 and configured.json()["revision"] == 2
     stale = client.put(
-        f"/admin/v1/apps/{app_id}/agent",
+        f"/admin/v1/apps/{app_id}/federations/default/agent",
         json={"core_plugin_id": "manual-channel", "config": {}, "expected_revision": 1},
         headers=admin,
     )
@@ -355,6 +357,7 @@ def test_registry_and_artifact_submission(live_stack):
     database.finish_agent_job(
         job["job_id"],
         app_id,
+        "default",
         result=result,
         new_state=result["new_state"],
         expected_config_revision=job["config_revision"],
@@ -367,6 +370,8 @@ def test_registry_and_artifact_submission(live_stack):
         ).fetchone()
         assert stored_job == {"status": "succeeded", "result": result}
         stored_agent = conn.execute(
-            "SELECT state, state_revision FROM app_agents WHERE app_id = %s", (app_id,)
+            """SELECT state, state_revision FROM federation_agents
+               WHERE app_id = %s AND federation_id = 'default'""",
+            (app_id,),
         ).fetchone()
         assert stored_agent == {"state": {"handled": 1}, "state_revision": 3}

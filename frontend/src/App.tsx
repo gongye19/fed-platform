@@ -85,6 +85,11 @@ type Activity = {
   target_id: string;
   result: string;
 };
+type AgentJob = {
+  job_id: string;
+  status: "pending" | "running" | "retry" | "succeeded" | "failed";
+  last_error: string | null;
+};
 
 const APP_SECTIONS = [
   ["overview", "概览"],
@@ -486,6 +491,22 @@ function VersionManagement({ appId, federationId, topology, submissions, release
     setBusy("generate");
     setMessage(null);
     try {
+      const readySubmissions = contributionRows.flatMap((row) => row.submission ? [row.submission] : []);
+      const roundIds = [...new Set(readySubmissions.map((item) => item.metadata.round_id).filter((value): value is string => typeof value === "string"))];
+      if (roundIds.length !== 1) throw new Error("站点提交不属于同一个有效轮次");
+      const requested = await api<AgentJob>(`${base}/agent/generations`, {
+        method: "POST",
+        body: JSON.stringify({
+          round_id: roundIds[0],
+          submission_ids: readySubmissions.map((item) => item.submission_id),
+        }),
+      });
+      let job = requested;
+      for (let attempt = 0; attempt < 180 && !["succeeded", "failed"].includes(job.status); attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        job = await api<AgentJob>(`${base}/agent/jobs/${requested.job_id}`);
+      }
+      if (job.status !== "succeeded") throw new Error(job.last_error || "联邦 Agent 生成超时");
       const release = await api<{ release_id: string }>(`${base}/releases/generate`, { method: "POST" });
       await onRefresh();
       setSelectedId(release.release_id);

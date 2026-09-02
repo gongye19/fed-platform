@@ -26,6 +26,18 @@ def test_manifest_derives_and_checks_schema_digest():
     )
     assert manifest.artifact_types[0].schema_digest == json_digest({"type": "object"})
     assert manifest.artifact_types[0].purpose == "contribution"
+    assert manifest.federation.algorithm is None
+
+    with_algorithm = manifest.model_dump(by_alias=True, mode="json")
+    with_algorithm["federation"] = {
+        "algorithm": {
+            "plugin_id": "example-merge",
+            "plugin_version": "1",
+            "config": {"minimum_sites": 2},
+        }
+    }
+    algorithm = FedAppManifest.model_validate(with_algorithm).federation.algorithm
+    assert algorithm and algorithm.plugin_id == "example-merge"
 
     raw_evaluation = manifest.model_dump(by_alias=True, mode="json")
     raw_evaluation["artifact_types"][0]["purpose"] = "evaluation"

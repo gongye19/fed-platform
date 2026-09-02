@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import uuid
 from contextlib import contextmanager
 from typing import Any, Iterator
@@ -76,18 +77,6 @@ class Database:
                 ),
             )
             conn.execute(
-                """INSERT INTO app_agents
-                   (app_id, core_plugin_id, core_plugin_version, config)
-                   VALUES (%s, %s, %s, %s)
-                   ON CONFLICT (app_id) DO NOTHING""",
-                (
-                    app_id,
-                    agent_binding["core_plugin_id"],
-                    agent_binding["core_plugin_version"],
-                    Jsonb(agent_binding["config"]),
-                ),
-            )
-            conn.execute(
                 """INSERT INTO federations (app_id, federation_id, display_name)
                    SELECT %s, 'default', %s
                    WHERE NOT EXISTS (
@@ -96,6 +85,30 @@ class Database:
                    )
                    ON CONFLICT (app_id, federation_id) DO NOTHING""",
                 (app_id, manifest["display_name"], app_id),
+            )
+            conn.execute(
+                """INSERT INTO federation_agents
+                   (app_id, federation_id, core_plugin_id, core_plugin_version, config,
+                    algorithm_plugin_id, algorithm_plugin_version, algorithm_config)
+                   VALUES (%s, 'default', %s, %s, %s, %s, %s, %s)
+                   ON CONFLICT (app_id, federation_id) DO NOTHING""",
+                (
+                    app_id,
+                    agent_binding["core_plugin_id"],
+                    agent_binding["core_plugin_version"],
+                    Jsonb(agent_binding["config"]),
+                    manifest["federation"]["algorithm"]["plugin_id"]
+                    if manifest["federation"]["algorithm"]
+                    else None,
+                    manifest["federation"]["algorithm"]["plugin_version"]
+                    if manifest["federation"]["algorithm"]
+                    else None,
+                    Jsonb(
+                        manifest["federation"]["algorithm"]["config"]
+                        if manifest["federation"]["algorithm"]
+                        else {}
+                    ),
+                ),
             )
 
             for item in manifest["artifact_types"]:
@@ -171,37 +184,101 @@ class Database:
         with self.connection() as conn:
             return conn.execute(
                 """SELECT a.app_id, a.display_name, a.current_version, a.status,
-                          aa.status AS agent_status, aa.core_plugin_id, aa.core_plugin_version,
+                          fa.status AS agent_status, fa.core_plugin_id, fa.core_plugin_version,
                           count(DISTINCT f.federation_id) AS federation_count,
                           count(DISTINCT m.site_id) AS site_count
                    FROM applications a
-                   JOIN app_agents aa USING (app_id)
-                   LEFT JOIN federations f ON f.app_id = a.app_id AND f.disabled_at IS NULL
+                   JOIN federations f ON f.app_id = a.app_id AND f.disabled_at IS NULL
+                   JOIN federation_agents fa
+                     ON fa.app_id = f.app_id AND fa.federation_id = f.federation_id
                    LEFT JOIN memberships m
                      ON m.app_id = f.app_id AND m.federation_id = f.federation_id
                     AND m.ended_at IS NULL
                    WHERE (%s::text IS NULL OR a.app_id > %s)
-                   GROUP BY a.app_id, aa.status, aa.core_plugin_id, aa.core_plugin_version
+                   GROUP BY a.app_id, fa.status, fa.core_plugin_id, fa.core_plugin_version
                    ORDER BY a.app_id
                    LIMIT %s""",
                 (after, after, limit),
             ).fetchall()
 
-    def get_agent_configuration(self, app_id: str) -> dict[str, Any]:
+    def get_agent_configuration(self, app_id: str, federation_id: str) -> dict[str, Any]:
         with self.connection() as conn:
             row = conn.execute(
-                """SELECT app_id, core_plugin_id, core_plugin_version, status, config,
-                          revision, state_revision, updated_at
-                   FROM app_agents WHERE app_id = %s""",
-                (app_id,),
+                """SELECT app_id, federation_id, core_plugin_id, core_plugin_version, status,
+                          config, algorithm_plugin_id, algorithm_plugin_version,
+                          algorithm_config, revision, state_revision,
+                          algorithm_state_revision, updated_at
+                   FROM federation_agents WHERE app_id = %s AND federation_id = %s""",
+                (app_id, federation_id),
             ).fetchone()
             if not row:
                 raise NotFoundError("application agent not found")
             return row
 
+    def update_algorithm_configuration(
+        self,
+        app_id: str,
+        federation_id: str,
+        plugin_id: str,
+        plugin_version: str,
+        config: dict[str, Any],
+        expected_revision: int,
+    ) -> dict[str, Any]:
+        with self.connection() as conn:
+            row = conn.execute(
+                """UPDATE federation_agents
+                   SET algorithm_plugin_id = %s, algorithm_plugin_version = %s,
+                       algorithm_config = %s, algorithm_state = '{}'::jsonb,
+                       algorithm_state_revision = algorithm_state_revision + 1,
+                       state = '{}'::jsonb, state_revision = state_revision + 1,
+                       revision = revision + 1, status = 'idle', updated_at = now()
+                   WHERE app_id = %s AND federation_id = %s AND revision = %s
+                   RETURNING app_id, federation_id, core_plugin_id, core_plugin_version,
+                             status, config, algorithm_plugin_id, algorithm_plugin_version,
+                             algorithm_config, revision, state_revision,
+                             algorithm_state_revision, updated_at""",
+                (
+                    plugin_id,
+                    plugin_version,
+                    Jsonb(config),
+                    app_id,
+                    federation_id,
+                    expected_revision,
+                ),
+            ).fetchone()
+            if not row:
+                if not conn.execute(
+                    """SELECT 1 FROM federation_agents
+                       WHERE app_id = %s AND federation_id = %s""",
+                    (app_id, federation_id),
+                ).fetchone():
+                    raise NotFoundError("federation agent not found")
+                raise ConflictError("agent configuration revision changed")
+            conn.execute(
+                """INSERT INTO audit_log
+                   (actor_type, actor_id, action, app_id, federation_id,
+                    target_type, target_id, detail)
+                   VALUES ('admin', 'admin', 'agent.algorithm.configured', %s, %s,
+                           'agent', %s, %s)""",
+                (
+                    app_id,
+                    federation_id,
+                    f"{app_id}/{federation_id}",
+                    Jsonb(
+                        {
+                            "algorithm_plugin_id": plugin_id,
+                            "algorithm_plugin_version": plugin_version,
+                            "revision": row["revision"],
+                        }
+                    ),
+                ),
+            )
+            return row
+
     def update_agent_configuration(
         self,
         app_id: str,
+        federation_id: str,
         core_plugin_id: str,
         core_plugin_version: str,
         config: dict[str, Any],
@@ -210,8 +287,9 @@ class Database:
         with self.connection() as conn:
             current = conn.execute(
                 """SELECT core_plugin_id, core_plugin_version
-                   FROM app_agents WHERE app_id = %s FOR UPDATE""",
-                (app_id,),
+                   FROM federation_agents
+                   WHERE app_id = %s AND federation_id = %s FOR UPDATE""",
+                (app_id, federation_id),
             ).fetchone()
             if not current:
                 raise NotFoundError("application agent not found")
@@ -220,15 +298,17 @@ class Database:
                 or current["core_plugin_version"] != core_plugin_version
             )
             row = conn.execute(
-                """UPDATE app_agents
+                """UPDATE federation_agents
                    SET core_plugin_id = %s, core_plugin_version = %s, config = %s,
                        revision = revision + 1,
                        state = CASE WHEN %s THEN '{}'::jsonb ELSE state END,
                        state_revision = state_revision + CASE WHEN %s THEN 1 ELSE 0 END,
                        status = 'idle', updated_at = now()
-                   WHERE app_id = %s AND revision = %s
-                   RETURNING app_id, core_plugin_id, core_plugin_version, status, config,
-                             revision, state_revision, updated_at""",
+                   WHERE app_id = %s AND federation_id = %s AND revision = %s
+                   RETURNING app_id, federation_id, core_plugin_id, core_plugin_version,
+                             status, config, algorithm_plugin_id, algorithm_plugin_version,
+                             algorithm_config, revision, state_revision,
+                             algorithm_state_revision, updated_at""",
                 (
                     core_plugin_id,
                     core_plugin_version,
@@ -236,6 +316,7 @@ class Database:
                     reset_state,
                     reset_state,
                     app_id,
+                    federation_id,
                     expected_revision,
                 ),
             ).fetchone()
@@ -243,11 +324,14 @@ class Database:
                 raise ConflictError("agent configuration revision changed")
             conn.execute(
                 """INSERT INTO audit_log
-                   (actor_type, actor_id, action, app_id, target_type, target_id, detail)
-                   VALUES ('admin', 'admin', 'agent.configured', %s, 'agent', %s, %s)""",
+                   (actor_type, actor_id, action, app_id, federation_id,
+                    target_type, target_id, detail)
+                   VALUES ('admin', 'admin', 'agent.configured', %s, %s,
+                           'agent', %s, %s)""",
                 (
                     app_id,
-                    app_id,
+                    federation_id,
+                    f"{app_id}/{federation_id}",
                     Jsonb(
                         {
                             "core_plugin_id": core_plugin_id,
@@ -431,6 +515,8 @@ class Database:
         federation_id: str,
         descriptor: dict[str, Any],
         storage_key: str,
+        actor_type: str = "admin",
+        actor_id: str = "admin",
     ) -> tuple[dict[str, Any], bool]:
         with self.connection() as conn:
             self._artifact_policy(
@@ -448,9 +534,11 @@ class Database:
                     """INSERT INTO audit_log
                        (actor_type, actor_id, action, app_id, federation_id,
                         target_type, target_id, detail)
-                       VALUES ('admin', 'admin', 'artifact.created', %s, %s,
+                       VALUES (%s, %s, 'artifact.created', %s, %s,
                                'artifact', %s, %s)""",
                     (
+                        actor_type,
+                        actor_id,
                         app_id,
                         federation_id,
                         descriptor["digest"],
@@ -458,6 +546,116 @@ class Database:
                     ),
                 )
             return artifact, created
+
+    def get_algorithm_inputs(
+        self, app_id: str, federation_id: str, submission_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        if len(submission_ids) != len(set(submission_ids)):
+            raise ConflictError("algorithm input submission IDs must be unique")
+        with self.connection() as conn:
+            rows = conn.execute(
+                """SELECT s.submission_id, s.site_id, a.digest, a.type_name,
+                          a.format_version, a.media_type, a.size_bytes, a.metadata,
+                          a.storage_key
+                   FROM submissions s
+                   JOIN artifacts a
+                     ON a.app_id = s.app_id AND a.federation_id = s.federation_id
+                    AND a.digest = s.artifact_digest
+                   JOIN artifact_types at
+                     ON at.app_id = a.app_id AND at.type_name = a.type_name
+                    AND at.format_version = a.format_version
+                   WHERE s.app_id = %s AND s.federation_id = %s
+                     AND s.submission_id = ANY(%s::uuid[])
+                     AND s.status = 'accepted' AND at.purpose = 'contribution'
+                   ORDER BY s.site_id, s.created_at""",
+                (app_id, federation_id, submission_ids),
+            ).fetchall()
+            if len(rows) != len(submission_ids):
+                raise NotFoundError("one or more algorithm inputs are unavailable in this federation")
+            return rows
+
+    def request_generation(
+        self,
+        app_id: str,
+        federation_id: str,
+        round_id: str,
+        submission_ids: list[str],
+    ) -> tuple[dict[str, Any], bool]:
+        self.get_algorithm_inputs(app_id, federation_id, submission_ids)
+        with self.connection() as conn:
+            agent = conn.execute(
+                """SELECT revision FROM federation_agents
+                   WHERE app_id = %s AND federation_id = %s
+                     AND algorithm_plugin_id IS NOT NULL""",
+                (app_id, federation_id),
+            ).fetchone()
+            if not agent:
+                raise ConflictError("federation domain has no algorithm binding")
+            dedupe_key = hashlib.sha256(
+                (
+                    round_id
+                    + f"\nrevision:{agent['revision']}\n"
+                    + "\n".join(sorted(submission_ids))
+                ).encode()
+            ).hexdigest()
+            payload = {
+                "round_id": round_id,
+                "submission_ids": submission_ids,
+                "agent_config_revision": agent["revision"],
+            }
+            job = conn.execute(
+                """INSERT INTO agent_jobs
+                   (job_id, app_id, federation_id, kind, dedupe_key, payload)
+                   VALUES (%s, %s, %s, 'generation.requested', %s, %s)
+                   ON CONFLICT (app_id, federation_id, kind, dedupe_key) DO NOTHING
+                   RETURNING job_id, status, created_at""",
+                (
+                    uuid.uuid4(),
+                    app_id,
+                    federation_id,
+                    dedupe_key,
+                    Jsonb(payload),
+                ),
+            ).fetchone()
+            if not job:
+                return (
+                    conn.execute(
+                        """SELECT job_id, status, created_at FROM agent_jobs
+                           WHERE app_id = %s AND federation_id = %s
+                             AND kind = 'generation.requested' AND dedupe_key = %s""",
+                        (app_id, federation_id, dedupe_key),
+                    ).fetchone(),
+                    False,
+                )
+            conn.execute(
+                """INSERT INTO audit_log
+                   (actor_type, actor_id, action, app_id, federation_id,
+                    target_type, target_id, detail)
+                   VALUES ('admin', 'admin', 'generation.requested', %s, %s,
+                           'agent_job', %s, %s)""",
+                (
+                    app_id,
+                    federation_id,
+                    str(job["job_id"]),
+                    Jsonb(payload),
+                ),
+            )
+            return job, True
+
+    def get_agent_job(
+        self, app_id: str, federation_id: str, job_id: uuid.UUID
+    ) -> dict[str, Any]:
+        with self.connection() as conn:
+            row = conn.execute(
+                """SELECT job_id, kind, status, attempts, result, last_error,
+                          created_at, updated_at
+                   FROM agent_jobs
+                   WHERE app_id = %s AND federation_id = %s AND job_id = %s""",
+                (app_id, federation_id, job_id),
+            ).fetchone()
+            if not row:
+                raise NotFoundError("agent job not found")
+            return row
 
     def get_artifact(
         self, app_id: str, federation_id: str, digest: str
@@ -641,10 +839,14 @@ class Database:
         with self.connection() as conn:
             application = conn.execute(
                 """SELECT a.app_id, a.display_name, a.current_version, a.status,
-                          aa.status AS agent_status, aa.core_plugin_id,
-                          aa.core_plugin_version, aa.revision AS agent_config_revision,
-                          aa.state_revision AS agent_state_revision, av.manifest
-                   FROM applications a JOIN app_agents aa USING (app_id)
+                          fa.status AS agent_status, fa.core_plugin_id,
+                          fa.core_plugin_version, fa.revision AS agent_config_revision,
+                          fa.state_revision AS agent_state_revision,
+                          fa.algorithm_plugin_id, fa.algorithm_plugin_version, av.manifest
+                   FROM applications a
+                   JOIN federations f ON f.app_id = a.app_id AND f.disabled_at IS NULL
+                   JOIN federation_agents fa
+                     ON fa.app_id = f.app_id AND fa.federation_id = f.federation_id
                    JOIN application_versions av
                      ON av.app_id = a.app_id AND av.app_version = a.current_version
                    WHERE a.app_id = %s""",
@@ -1102,21 +1304,38 @@ class Database:
             )
             return {"command_id": command_id, "delivery_state": state}
 
-    def claim_agent_job(self, worker_id: str) -> dict[str, Any] | None:
+    def claim_agent_job(
+        self,
+        worker_id: str,
+        algorithm_plugin_ids: list[str] | None = None,
+        *,
+        process_agent_events: bool = True,
+    ) -> dict[str, Any] | None:
+        algorithm_plugin_ids = algorithm_plugin_ids or []
         with self.connection() as conn:
             job = conn.execute(
                 """WITH picked AS (
                      SELECT j.job_id FROM agent_jobs j
-                     JOIN app_agents aa ON aa.app_id = j.app_id
+                     JOIN federation_agents fa
+                       ON fa.app_id = j.app_id AND fa.federation_id = j.federation_id
                      WHERE j.status IN ('pending', 'retry') AND j.available_at <= now()
+                       AND (
+                         (j.kind <> 'generation.requested' AND %s)
+                         OR (
+                           j.kind = 'generation.requested'
+                           AND fa.algorithm_plugin_id = ANY(%s::text[])
+                         )
+                       )
                        AND (j.leased_until IS NULL OR j.leased_until < now())
                        AND NOT EXISTS (
                          SELECT 1 FROM agent_jobs active
-                         WHERE active.app_id = j.app_id AND active.status = 'running'
+                         WHERE active.app_id = j.app_id
+                           AND active.federation_id = j.federation_id
+                           AND active.status = 'running'
                            AND active.leased_until > now()
                        )
                      ORDER BY j.available_at, j.created_at
-                     FOR UPDATE OF j, aa SKIP LOCKED LIMIT 1
+                     FOR UPDATE OF j, fa SKIP LOCKED LIMIT 1
                    ), claimed AS (
                      UPDATE agent_jobs j
                      SET status = 'running', attempts = attempts + 1, leased_by = %s,
@@ -1124,16 +1343,21 @@ class Database:
                      FROM picked WHERE j.job_id = picked.job_id
                      RETURNING j.*
                    )
-                   SELECT claimed.*, aa.core_plugin_id, aa.core_plugin_version,
-                          aa.config, aa.revision AS config_revision,
-                          aa.state, aa.state_revision
-                   FROM claimed JOIN app_agents aa USING (app_id)""",
-                (worker_id,),
+                   SELECT claimed.*, fa.core_plugin_id, fa.core_plugin_version,
+                          fa.config, fa.revision AS config_revision,
+                          fa.state, fa.state_revision, fa.algorithm_plugin_id,
+                          fa.algorithm_plugin_version, fa.algorithm_config,
+                          fa.algorithm_state, fa.algorithm_state_revision
+                   FROM claimed JOIN federation_agents fa
+                     ON fa.app_id = claimed.app_id
+                    AND fa.federation_id = claimed.federation_id""",
+                (process_agent_events, algorithm_plugin_ids, worker_id),
             ).fetchone()
             if job:
                 conn.execute(
-                    "UPDATE app_agents SET status = 'running', updated_at = now() WHERE app_id = %s",
-                    (job["app_id"],),
+                    """UPDATE federation_agents SET status = 'running', updated_at = now()
+                       WHERE app_id = %s AND federation_id = %s""",
+                    (job["app_id"], job["federation_id"]),
                 )
             return job
 
@@ -1141,12 +1365,15 @@ class Database:
         self,
         job_id: uuid.UUID,
         app_id: str,
+        federation_id: str,
         error: str | None = None,
         *,
         result: dict[str, Any] | None = None,
         new_state: dict[str, Any] | None = None,
+        new_algorithm_state: dict[str, Any] | None = None,
         expected_config_revision: int | None = None,
         expected_state_revision: int | None = None,
+        expected_algorithm_state_revision: int | None = None,
     ) -> None:
         with self.connection() as conn:
             if error:
@@ -1171,15 +1398,16 @@ class Database:
                 )
                 if new_state is not None:
                     updated = conn.execute(
-                        """UPDATE app_agents
+                        """UPDATE federation_agents
                            SET state = %s, state_revision = state_revision + 1, updated_at = now()
-                           WHERE app_id = %s
+                           WHERE app_id = %s AND federation_id = %s
                              AND (%s::bigint IS NULL OR revision = %s)
                              AND (%s::bigint IS NULL OR state_revision = %s)
                            RETURNING state_revision""",
                         (
                             Jsonb(new_state),
                             app_id,
+                            federation_id,
                             expected_config_revision,
                             expected_config_revision,
                             expected_state_revision,
@@ -1188,14 +1416,39 @@ class Database:
                     ).fetchone()
                     if not updated:
                         raise ConflictError("agent configuration or state revision changed")
+                if new_algorithm_state is not None:
+                    updated = conn.execute(
+                        """UPDATE federation_agents
+                           SET algorithm_state = %s,
+                               algorithm_state_revision = algorithm_state_revision + 1,
+                               updated_at = now()
+                           WHERE app_id = %s AND federation_id = %s
+                             AND (%s::bigint IS NULL OR revision = %s)
+                             AND (%s::bigint IS NULL OR algorithm_state_revision = %s)
+                           RETURNING algorithm_state_revision""",
+                        (
+                            Jsonb(new_algorithm_state),
+                            app_id,
+                            federation_id,
+                            expected_config_revision,
+                            expected_config_revision,
+                            expected_algorithm_state_revision,
+                            expected_algorithm_state_revision,
+                        ),
+                    ).fetchone()
+                    if not updated:
+                        raise ConflictError("algorithm configuration or state revision changed")
                 if result is not None:
                     conn.execute(
                         """INSERT INTO audit_log
-                           (actor_type, actor_id, action, app_id, target_type, target_id, detail)
-                           VALUES ('agent', %s, 'agent.job.completed', %s, 'agent_job', %s, %s)""",
+                           (actor_type, actor_id, action, app_id, federation_id,
+                            target_type, target_id, detail)
+                           VALUES ('agent', %s, 'agent.job.completed', %s, %s,
+                                   'agent_job', %s, %s)""",
                         (
+                            f"{app_id}/{federation_id}",
                             app_id,
-                            app_id,
+                            federation_id,
                             str(job_id),
                             Jsonb(
                                 {
@@ -1207,6 +1460,7 @@ class Database:
                     )
                 agent_status = "idle"
             conn.execute(
-                "UPDATE app_agents SET status = %s, updated_at = now() WHERE app_id = %s",
-                (agent_status, app_id),
+                """UPDATE federation_agents SET status = %s, updated_at = now()
+                   WHERE app_id = %s AND federation_id = %s""",
+                (agent_status, app_id, federation_id),
             )

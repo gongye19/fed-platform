@@ -1,6 +1,6 @@
 # FedAgent Platform
 
-我们自研 Agent 应用的多站点联邦通道。每个应用有独立 AppFederationAgent；平台统一收集、存储、任务、发布和回滚，不预设联邦的是 memory、skill 还是模型权重。
+我们自研 Agent 应用的多站点联邦通道。每个应用有一个独立联邦域，域内有独立 Federation Agent；平台统一收集、存储、任务、发布和回滚，不预设联邦的是 memory、skill 还是模型权重。
 
 平台契约面向今后从零开发的新应用；未遵循契约的历史应用不是兼容目标。
 
@@ -14,7 +14,7 @@
 
 正式 v1 的管理与发布通道已经实现：
 
-- FedApp Manifest、Application、AppFederationAgent 注册；
+- FedApp Manifest、Application、Federation Agent 与算法绑定注册；
 - 每个 Application 自动创建一个 Federation；
 - Application-scoped Site API Key 与首次成功上传自动入域；
 - 站点上传必带应用版本和实际使用的联邦版本，平台分别保存；
@@ -31,7 +31,7 @@
 - Application、拓扑、工件、发布、站点和应用级活动管理 API；
 - 可独立部署的 React 管理控制台，应用内横向展示概览、版本、效果、时间线和日志。
 
-旧 SQLite `Update / Digest / Plugin` spike 已删除，不提供兼容接口。DeepSeek Harness Agent Core 与 `manual-channel` 回退已实现；Fed-EvoMed 已用外部协调器验证算法通道，通用插件执行器仍保留协议位置。
+旧 SQLite `Update / Digest / Plugin` spike 已删除，不提供兼容接口。DeepSeek Harness Agent Core 与 `manual-channel` 回退已实现；Worker 可按域调用已安装、已版本化的联邦算法插件，输出仍是应用自定义 Artifact。
 
 ## 仓库结构
 
@@ -72,8 +72,11 @@ GET  /ready
 
 POST /admin/v1/apps
 GET  /admin/v1/apps
-GET  /admin/v1/apps/{app_id}/agent
-PUT  /admin/v1/apps/{app_id}/agent
+GET  /admin/v1/apps/{app_id}/federations/{federation_id}/agent
+PUT  /admin/v1/apps/{app_id}/federations/{federation_id}/agent
+PUT  /admin/v1/apps/{app_id}/federations/{federation_id}/agent/algorithm
+POST /admin/v1/apps/{app_id}/federations/{federation_id}/agent/generations
+GET  /admin/v1/apps/{app_id}/federations/{federation_id}/agent/jobs/{job_id}
 GET  /admin/v1/apps/{app_id}/topology
 GET  /admin/v1/sites
 GET  /admin/v1/activity

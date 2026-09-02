@@ -1,9 +1,11 @@
 export type VersionSite = { site_id: string; display_name: string };
 export type VersionSubmission = {
+  submission_id: string;
   site_id: string;
   purpose: string;
   created_at: string;
   artifact_digest: string;
+  metadata: Record<string, unknown>;
 };
 
 export function siteContributionRows(

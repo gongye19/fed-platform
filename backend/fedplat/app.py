@@ -24,12 +24,14 @@ from fedplat.agent_core import (
 from fedplat.artifact_store import ArtifactStoreError, S3ArtifactStore
 from fedplat.protocol import (
     AgentConfigurationUpdate,
+    AlgorithmConfigurationUpdate,
     AppSiteKeyCreate,
     ArtifactDescriptor,
     CommandAck,
     DeliveryAction,
     Digest,
     FedAppManifest,
+    FederationGenerationRequest,
     ReleaseCreate,
     StableId,
     Version,
@@ -250,20 +252,28 @@ def list_applications(
     return {"items": items, "next": items[-1]["app_id"] if len(items) == limit else None}
 
 
-@app.get("/admin/v1/apps/{app_id}/agent", dependencies=[Depends(require_admin)])
+@app.get(
+    "/admin/v1/apps/{app_id}/federations/{federation_id}/agent",
+    dependencies=[Depends(require_admin)],
+)
 def get_agent_configuration(
     app_id: StableId,
+    federation_id: StableId,
     db: Annotated[Database, Depends(get_database)],
 ) -> dict[str, Any]:
     try:
-        return db.get_agent_configuration(app_id)
+        return db.get_agent_configuration(app_id, federation_id)
     except (ConflictError, NotFoundError, ForbiddenError) as exc:
         map_store_error(exc)
 
 
-@app.put("/admin/v1/apps/{app_id}/agent", dependencies=[Depends(require_admin)])
+@app.put(
+    "/admin/v1/apps/{app_id}/federations/{federation_id}/agent",
+    dependencies=[Depends(require_admin)],
+)
 def update_agent_configuration(
     app_id: StableId,
+    federation_id: StableId,
     body: AgentConfigurationUpdate,
     db: Annotated[Database, Depends(get_database)],
 ) -> dict[str, Any]:
@@ -271,6 +281,7 @@ def update_agent_configuration(
         config = validate_core_config(body.core_plugin_id, body.config)
         return db.update_agent_configuration(
             app_id,
+            federation_id,
             body.core_plugin_id,
             core_version(body.core_plugin_id),
             config,
@@ -278,6 +289,69 @@ def update_agent_configuration(
         )
     except AgentCoreError as exc:
         fail(400, "E_BAD_AGENT_CONFIG", str(exc))
+    except (ConflictError, NotFoundError, ForbiddenError) as exc:
+        map_store_error(exc)
+
+
+@app.put(
+    "/admin/v1/apps/{app_id}/federations/{federation_id}/agent/algorithm",
+    dependencies=[Depends(require_admin)],
+)
+def update_algorithm_configuration(
+    app_id: StableId,
+    federation_id: StableId,
+    body: AlgorithmConfigurationUpdate,
+    db: Annotated[Database, Depends(get_database)],
+) -> dict[str, Any]:
+    try:
+        return db.update_algorithm_configuration(
+            app_id,
+            federation_id,
+            body.plugin_id,
+            body.plugin_version,
+            body.config,
+            body.expected_revision,
+        )
+    except (ConflictError, NotFoundError, ForbiddenError) as exc:
+        map_store_error(exc)
+
+
+@app.post(
+    "/admin/v1/apps/{app_id}/federations/{federation_id}/agent/generations",
+    dependencies=[Depends(require_admin)],
+)
+def request_federation_generation(
+    app_id: StableId,
+    federation_id: StableId,
+    body: FederationGenerationRequest,
+    response: Response,
+    db: Annotated[Database, Depends(get_database)],
+) -> dict[str, Any]:
+    try:
+        job, created = db.request_generation(
+            app_id,
+            federation_id,
+            body.round_id,
+            [str(item) for item in body.submission_ids],
+        )
+    except (ConflictError, NotFoundError, ForbiddenError) as exc:
+        map_store_error(exc)
+    response.status_code = 202 if created else 200
+    return {**job, "created": created}
+
+
+@app.get(
+    "/admin/v1/apps/{app_id}/federations/{federation_id}/agent/jobs/{job_id}",
+    dependencies=[Depends(require_admin)],
+)
+def get_federation_agent_job(
+    app_id: StableId,
+    federation_id: StableId,
+    job_id: uuid.UUID,
+    db: Annotated[Database, Depends(get_database)],
+) -> dict[str, Any]:
+    try:
+        return db.get_agent_job(app_id, federation_id, job_id)
     except (ConflictError, NotFoundError, ForbiddenError) as exc:
         map_store_error(exc)
 

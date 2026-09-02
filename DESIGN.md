@@ -10,22 +10,24 @@
 ```text
 FedAgent Platform
 ├─ Application A
-│  ├─ App Federation Agent A       应用级联邦协调者
-│  └─ Federation A                站点 1 / 2 / 3
+│  └─ Federation A
+│     ├─ Federation Agent A       本域联邦协调者
+│     └─ 站点 1 / 2 / 3
 │
 └─ Application B
-   ├─ App Federation Agent B
-   └─ Federation B                站点 4 / 5 / 6
+   └─ Federation B
+      ├─ Federation Agent B
+      └─ 站点 4 / 5 / 6
 ```
 
 固定规则：
 
-1. 注册一个 Application，平台就创建一个逻辑的 `AppFederationAgent`。
-2. `AppFederationAgent` 只能看到本应用的站点、工件、任务和发布。
+1. 注册一个 Application，平台就创建唯一 Federation 及其逻辑 `FederationAgent`。
+2. `FederationAgent` 只能看到本域的站点、工件、任务和发布。
 3. 真正的隔离/聚合 key 是 `(app_id, federation_id)`。
 4. 不同应用的内容永远不 union。
 5. 每个应用固定一个 Federation；应用之间天然隔离，域不由管理员手工新建。
-6. Agent 是逻辑 actor，不是每个应用常驻一个容器；Worker 按 `app_id` 加载它的状态和插件配置执行。
+6. Agent 是逻辑 actor，不是每个应用常驻一个容器；Worker 按 `(app_id, federation_id)` 加载独立状态和插件配置执行。
 
 ---
 
@@ -71,7 +73,7 @@ object-store  工件 bytes；有大工件时再接 S3/MinIO
 | `Application` | 一个按 FedApp 协议开发的产品 |
 | `Site` | 一个部署站点/机构 |
 | `Membership` | Site 首次成功上传后自动形成的应用域成员关系 |
-| `AppFederationAgent` | 每个 Application 一个的逻辑联邦协调者 |
+| `FederationAgent` | 每个 Federation 一个的逻辑联邦协调者 |
 | `Federation` | 一组站点的独立联邦空间 |
 | `ArtifactType` | 应用自定义的工件类型、purpose、schema 与处理器绑定 |
 | `Artifact` | 不可变、内容寻址的联邦对象；可以是 JSON 或 blob |
@@ -79,7 +81,7 @@ object-store  工件 bytes；有大工件时再接 S3/MinIO
 | `Task` | Agent/算法请求站点本地执行的受 schema 约束任务 |
 | `Release` | Agent 决定可分发的一组 Artifact 快照 |
 | `Delivery` | 某 Release 到某 Site 的 stage/activate/rollback/ack 状态 |
-| `AgentJob` | AppFederationAgent 或插件的可重试后台任务 |
+| `AgentJob` | FederationAgent 或插件的可重试后台任务 |
 | `PluginBinding` | 指定 Agent/Federation/ArtifactType 使用哪个插件版本 |
 
 这些实体是平台内核，不因联邦 skill 还是权重而变。
@@ -97,6 +99,12 @@ schema_version: fedapp/v1
 app_id: com.example.research-agent
 app_version: 1.0.0
 adapter_protocol: ">=1.0 <2.0"
+
+federation:
+  algorithm:
+    plugin_id: example-merge
+    plugin_version: "1"
+    config: {}
 
 artifact_types:
   - type: com.example.observation
@@ -120,19 +128,19 @@ task_types:
 POST /admin/v1/apps
     验证 Manifest
     创建 Application namespace
-    创建 AppFederationAgent
     创建唯一 Federation
+    在 Federation 内创建独立 FederationAgent
     绑定受限 DeepSeek Harness Agent Core
 
 POST /admin/v1/apps/{app_id}/site-keys
     为一个部署站点签发绑定 app_id + site_id 的可轮换凭据
     此时不创建 Site；首次成功上传时自动创建 Site 与 Membership
 
-PUT /admin/v1/apps/{app_id}/agent
+PUT /admin/v1/apps/{app_id}/federations/{federation_id}/agent
     更新 Agent Core 插件与配置 revision
 
-PUT /admin/v1/apps/{app_id}/federations/{federation_id}/plugins
-    绑定 Artifact Handler / Federation Algorithm
+PUT /admin/v1/apps/{app_id}/federations/{federation_id}/agent/algorithm
+    绑定 Federation Algorithm 与配置 revision
 ```
 
 没有联邦算法插件时，Application 仍可注册和接收 Submission。Agent Core 的结构化意图会被保存；受保护的算法协调器可读取贡献、写回发布 Artifact，管理员仍可创建 Release 并分发。
@@ -258,7 +266,7 @@ Control API 校验应用 Key、X-App-Version、X-Federation-Version、schema、d
   ↓
 PostgreSQL 写 Submission/Event，Object Store 保存 bytes
   ↓
-为 AppFederationAgent 创建 AgentJob
+为本域 FederationAgent 创建 AgentJob
 ```
 
 平台不从应用拉原始数据。应用自己决定何时抽取、脱敏并产生已注册 Artifact。
@@ -266,7 +274,7 @@ PostgreSQL 写 Submission/Event，Object Store 保存 bytes
 ### 6.2 Agent/Algorithm 主动发本地任务
 
 ```text
-AppFederationAgent 返回 issue_task 意图
+FederationAgent 返回 issue_task 意图
   ↓ Core 校验 membership/task schema
 创建 task.execute Command
   ↓ Federation Node 拉取并交给应用
@@ -340,7 +348,7 @@ Agent 不能直接写数据库、读站点凭据或发 HTTP 到站点。内核�
 
 | 插件 | 职责 | 例子 |
 |---|---|---|
-| `AgentCorePlugin` | 决定应用级 Agent 收到事件后怎么规划 | 确定性 workflow、LLM Agent、不同 Harness |
+| `AgentCorePlugin` | 决定域 Agent 收到事件后怎么规划 | 确定性 workflow、LLM Agent、不同 Harness |
 | `ArtifactHandlerPlugin` | 验证工件，提取标准元数据/兼容性 key | JSON Schema、Agent Skills、memory、SafeTensors/LoRA |
 | `FederationAlgorithmPlugin` | 对某 Federation 的输入工件执行联邦计算 | union/filter、skill evolution、FedAvg、FedProx |
 
@@ -367,7 +375,7 @@ FederationAlgorithmPlugin.run(federation_snapshot, input_refs[], plugin_state) -
 ### 8.3 Agent Core 的边界
 
 - 应用内服务用户的 Agent Core 仍属于应用自身，不是平台插件。
-- 这里的 `AgentCorePlugin` 只是中心 `AppFederationAgent` 的决策核心。
+- 这里的 `AgentCorePlugin` 只是域内 `FederationAgent` 的决策核心。
 - 它可以是一段确定性 workflow，也可以是使用某个 Harness/LLM 的 Agent。
 - 平台内核不是 Agent；身份、安全、状态、审计和发布激活不交给 LLM。
 
@@ -413,7 +421,7 @@ application_versions
 sites
 app_site_credentials
 memberships
-app_agents
+federation_agents
 federations
 artifact_types
 task_types
@@ -490,7 +498,7 @@ audit_log
 2. 实现 Application 自动建域、应用站点 Key、首次上传自动入域与隔离。
 3. 实现 Federation Node outbox/inbox、上下行、断网重试和 Artifact 校验。
 4. 实现 Artifact 存储、Submission、Task、Release、Delivery 通道。
-5. 注册应用时自动创建 AppFederationAgent，默认使用受限 `deepseek-harness` Core。
+5. 注册应用时在唯一 Federation 内自动创建 FederationAgent，默认使用受限 `deepseek-harness` Core。
 6. 冻结三个插件 manifest/调用契约，只实现内置 JSON/opaque handler。
 7. 提供 conformance test runner 和一个从零按协议开发的参考应用。
 8. 提供 Federation Console，查看 Application/Site、当前联邦版本和通道状态。
@@ -498,7 +506,7 @@ audit_log
 ### 不做
 
 - 不实现 memory/skill/FedAvg 等真实联邦算法。
-- 不自动执行尚未实现的联邦算法意图；当前只校验并保存 Agent 决策。
+- `run_algorithm` 已执行已安装的版本化算法插件；其余 Agent 意图仍逐项实现。
 - 不实现外部插件动态安装、市场和容器编排。
 - 不为未遵循 FedApp 契约的历史应用做兼容层。
 - 不管应用镜像升级和站点 K8s/VM 运维。
@@ -507,7 +515,7 @@ audit_log
 
 ## 13. v1 验收
 
-1. 注册两个新应用后，自动出现两个相互隔离的 AppFederationAgent。
+1. 注册两个新应用后，自动出现两个相互隔离的 FederationAgent。
 2. Application A 的站点 1/2/3 能提交、存储、查看和分发 A 的工件，Application B 永远不可见。
 3. 平台关闭时业务应用照常工作；Federation Node 在恢复后不丢不重地上传。
 4. 小 JSON 和大 blob 都可通过 Descriptor 上传、存储和下载，digest 错误必须拒绝。

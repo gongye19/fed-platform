@@ -85,6 +85,16 @@ class S3ArtifactStore:
         except (BotoCoreError, ClientError) as exc:
             raise ArtifactStoreError("failed to delete artifact object") from exc
 
+    def read_bytes(self, key: str, expected_size: int) -> bytes:
+        try:
+            response = self.client.get_object(Bucket=self.bucket, Key=key)
+            content = response["Body"].read(expected_size + 1)
+        except (BotoCoreError, ClientError) as exc:
+            raise ArtifactStoreError("failed to read artifact object") from exc
+        if len(content) != expected_size:
+            raise ArtifactStoreError("artifact object size verification failed")
+        return content
+
     def download_url(self, key: str, expires_in: int = 900) -> str:
         try:
             return self.client.generate_presigned_url(
