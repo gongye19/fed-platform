@@ -68,7 +68,7 @@ small { color: var(--muted); }
   inset: 0 auto 0 0;
   z-index: 10;
   display: flex;
-  width: 260px;
+  width: 220px;
   flex-direction: column;
   padding: 24px 16px 18px;
   background: rgba(8, 9, 10, .94);
@@ -126,7 +126,7 @@ small { color: var(--muted); }
 .connection i { width: 6px; height: 6px; background: var(--green); border-radius: 50%; box-shadow: 0 0 0 3px rgba(118, 199, 160, .09); }
 .environment { color: var(--muted); font: 10px/1.2 "Geist Mono Variable", monospace; text-transform: uppercase; letter-spacing: .08em; }
 
-.content { min-height: 100vh; margin-left: 260px; padding: 44px clamp(28px, 4vw, 64px) 80px; }
+.content { min-height: 100vh; margin-left: 220px; padding: 44px clamp(28px, 4vw, 64px) 80px; }
 .page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 32px; max-width: 1320px; margin: 0 auto 28px; }
 .page-header > div { min-width: 0; }
 .page-header__meta { max-width: 720px; margin: 0; color: var(--secondary); font-size: 14px; line-height: 1.5; text-wrap: pretty; }
