@@ -292,8 +292,8 @@ td small { margin-top: 4px; }
 .architecture-workbench__bar h2 { margin: 0; color: var(--ink); font-size: 13px; }
 .architecture-workbench__bar span { color: var(--muted); font-size: 11px; }
 .architecture-workbench__bar small { color: var(--muted); font-size: 10px; }
-.fixed-diagram-scroll { overflow-x: auto; }
-.react-flow-canvas { min-width: 900px; height: 640px; background: #0d0e11; }
+.fixed-diagram-scroll { overflow: hidden; }
+.react-flow-canvas { width: 100%; min-width: 0; height: 640px; background: #0d0e11; }
 .react-flow-canvas--hierarchy { height: auto; aspect-ratio: 1200 / 772; }
 .react-flow-canvas--flow { height: auto; aspect-ratio: 1200 / 470; }
 .react-flow-canvas .react-flow { --xy-background-color: #0d0e11; }
