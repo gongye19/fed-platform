@@ -11,7 +11,6 @@ export type EvaluationRow = {
   siteId: string;
   baseline: number | null;
   candidate: number | null;
-  sampleSize: number | null;
   createdAt: string;
 };
 
@@ -19,7 +18,6 @@ export type EvaluationTrend = {
   rounds: Array<{ roundId: string; createdAt: string }>;
   siteIds: string[];
   valuesBySite: Record<string, Array<number | null>>;
-  totals: Array<number | null>;
 };
 
 export type SiteTrackNode = {
@@ -43,12 +41,10 @@ export function groupEvaluationResults(items: EvaluationInput[]) {
       siteId: item.site_id,
       baseline: null,
       candidate: null,
-      sampleSize: null,
       createdAt: item.created_at,
     };
     if (typeof item.metadata.baseline_accuracy === "number") row.baseline = item.metadata.baseline_accuracy;
     if (typeof item.metadata.candidate_accuracy === "number") row.candidate = item.metadata.candidate_accuracy;
-    if (typeof item.metadata.sample_size === "number") row.sampleSize = item.metadata.sample_size;
     if (item.created_at > row.createdAt) row.createdAt = item.created_at;
     grouped.set(key, row);
   }
@@ -60,14 +56,6 @@ export function latestEvaluationRows(rows: EvaluationRow[]) {
   if (grouped.length === 0) return rows;
   const latest = grouped.reduce((current, row) => row.createdAt > current.createdAt ? row : current);
   return rows.filter((row) => row.experimentId === latest.experimentId);
-}
-
-function weighted(rows: EvaluationRow[], field: "baseline" | "candidate") {
-  const available = rows.filter((row) => row[field] !== null);
-  if (available.length === 0) return null;
-  const weight = (row: EvaluationRow) => row.sampleSize && row.sampleSize > 0 ? row.sampleSize : 1;
-  const denominator = available.reduce((sum, row) => sum + weight(row), 0);
-  return available.reduce((sum, row) => sum + (row[field] || 0) * weight(row), 0) / denominator;
 }
 
 export function buildEvaluationTrend(rows: EvaluationRow[]): EvaluationTrend {
@@ -90,14 +78,10 @@ export function buildEvaluationTrend(rows: EvaluationRow[]): EvaluationTrend {
       siteRows.find((row) => row.roundId === roundId)?.candidate ?? null
     ))]];
   }));
-  const firstRoundRows = rounds.length === 0 ? [] : rows.filter((row) => row.roundId === rounds[0].roundId);
   return {
     rounds,
     siteIds,
     valuesBySite,
-    totals: [weighted(firstRoundRows, "baseline"), ...rounds.map(({ roundId }) => (
-      weighted(rows.filter((row) => row.roundId === roundId), "candidate")
-    ))],
   };
 }
 

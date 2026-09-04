@@ -10,8 +10,8 @@ test("combines baseline and candidate reports per round and site", () => {
   ]);
 
   assert.deepEqual(rows, [
-    { key: "round-1:site-a", roundId: "round-1", experimentId: null, siteId: "site-a", baseline: 0.6, candidate: 0.8, sampleSize: 10, createdAt: "2026-01-01T00:01:00Z" },
-    { key: "round-1:site-b", roundId: "round-1", experimentId: null, siteId: "site-b", baseline: 0.7, candidate: null, sampleSize: null, createdAt: "2026-01-01T00:02:00Z" },
+    { key: "round-1:site-a", roundId: "round-1", experimentId: null, siteId: "site-a", baseline: 0.6, candidate: 0.8, createdAt: "2026-01-01T00:01:00Z" },
+    { key: "round-1:site-b", roundId: "round-1", experimentId: null, siteId: "site-b", baseline: 0.7, candidate: null, createdAt: "2026-01-01T00:02:00Z" },
   ]);
 });
 
@@ -26,7 +26,7 @@ test("shows only the latest experiment while retaining its federation rounds", (
   assert.deepEqual(latestEvaluationRows(rows).map((row) => row.roundId), ["current-run-r1", "current-run-r2", "current-run-r3"]);
 });
 
-test("builds site and weighted total trends in chronological round order", () => {
+test("builds site trends in chronological round order", () => {
   const rows = groupEvaluationResults([
     { site_id: "site-a", created_at: "2026-01-02T00:00:00Z", metadata: { round_id: "round-2", baseline_accuracy: 0.6, candidate_accuracy: 0.9, sample_size: 10 } },
     { site_id: "site-a", created_at: "2026-01-01T00:00:00Z", metadata: { round_id: "round-1", baseline_accuracy: 0.6, candidate_accuracy: 0.8, sample_size: 10 } },
@@ -37,9 +37,6 @@ test("builds site and weighted total trends in chronological round order", () =>
 
   assert.deepEqual(trend.rounds.map((round) => round.roundId), ["round-1", "round-2"]);
   assert.deepEqual(trend.valuesBySite, { "site-a": [0.6, 0.8, 0.9], "site-b": [0.7, 0.7, 0.85] });
-  assert.ok(Math.abs((trend.totals[0] || 0) - 2 / 3) < 0.000001);
-  assert.ok(Math.abs((trend.totals[1] || 0) - 11 / 15) < 0.000001);
-  assert.ok(Math.abs((trend.totals[2] || 0) - 13 / 15) < 0.000001);
 });
 
 test("builds complete and incomplete checkpoints for each release cycle", () => {

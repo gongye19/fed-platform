@@ -8,6 +8,10 @@ export type VersionSubmission = {
   metadata: Record<string, unknown>;
 };
 
+export function releaseLabels(releases: Array<{ release_id: string; created_at: string }>) {
+  return new Map(releases.slice().sort((left, right) => left.created_at.localeCompare(right.created_at)).map((release, index) => [release.release_id, `版本 ${index + 1}`]));
+}
+
 export function siteContributionRows(
   sites: VersionSite[],
   submissions: VersionSubmission[],

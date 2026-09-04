@@ -246,16 +246,13 @@ td small { margin-top: 4px; }
 .effect-legend { display: flex; flex-wrap: wrap; gap: 10px 18px; padding: 14px 20px 0; color: var(--secondary); font-size: 11px; }
 .effect-legend span, .track-legend span { display: inline-flex; align-items: center; gap: 7px; }
 .effect-legend__line { width: 18px; height: 2px; background: var(--secondary); border-radius: 2px; }
-.effect-legend__line--total { height: 3px; background: var(--ink); }
 .effect-chart__scroll { overflow-x: auto; }
 .effect-chart { display: block; width: 100%; min-width: 760px; height: auto; }
 .effect-chart__grid { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .effect-chart__axis { fill: var(--muted); font: 10px "Geist Mono Variable", monospace; }
-.effect-chart__site-line, .effect-chart__total-line { fill: none; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.effect-chart__site-line { fill: none; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .effect-chart__site-line { stroke-width: 1.5; opacity: .8; }
-.effect-chart__total-line { stroke: var(--ink); stroke-width: 3; }
 .effect-chart__point { stroke: var(--surface-1); stroke-width: 2; vector-effect: non-scaling-stroke; }
-.effect-chart__total-point { fill: var(--surface-1); stroke: var(--ink); stroke-width: 2.5; vector-effect: non-scaling-stroke; }
 .track-legend { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px 15px; color: var(--muted); font-size: 10px; }
 .track-mark { display: block; width: 10px; height: 10px; background: var(--surface-1); border: 2px solid var(--muted); border-radius: 50%; }
 .track-mark--complete, .track-mark--upload { background: var(--green); border-color: var(--green); }

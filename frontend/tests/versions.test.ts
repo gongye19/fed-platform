@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { siteContributionRows } from "../src/versions.ts";
+import { releaseLabels, siteContributionRows } from "../src/versions.ts";
+
+test("numbers versions by creation order instead of exposing internal labels", () => {
+  assert.deepEqual(Array.from(releaseLabels([
+    { release_id: "new", created_at: "2026-01-02T00:00:00Z" },
+    { release_id: "old", created_at: "2026-01-01T00:00:00Z" },
+  ])), [["old", "版本 1"], ["new", "版本 2"]]);
+});
 
 test("shows the latest contribution from every site against the latest version", () => {
   const rows = siteContributionRows(
