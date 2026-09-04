@@ -565,14 +565,6 @@ function deliveryLabel(delivery: Delivery) {
   return "已接收，未采用";
 }
 
-function CurrentSiteVersions({ memberships }: { memberships: Membership[] }) {
-  return <section className="version-overview__pane current-versions"><div className="version-overview__pane-head"><h3>站点当前版本</h3><span>{memberships.length}</span></div>
-    {memberships.length === 0 ? <Empty>还没有站点接入这个应用。</Empty> : <div className="current-version-list"><table className="site-version-table"><thead><tr><th>站点</th><th>当前联邦版本</th></tr></thead><tbody>
-      {memberships.map((member) => <tr key={member.site_id}><td><strong>{visibleName(member.display_name)}</strong></td><td>{member.reported_release_id ? <code className="release-code" title={member.reported_release_id} translate="no">{releaseCode(member.reported_release_id)}</code> : <Status value="尚未采用" />}</td></tr>)}
-    </tbody></table></div>}
-  </section>;
-}
-
 function FederationVersionTable({ releases, memberships, batchNumbers, selectedId, onSelect }: {
   releases: ReleaseSummary[];
   memberships: Membership[];
@@ -582,7 +574,7 @@ function FederationVersionTable({ releases, memberships, batchNumbers, selectedI
 }) {
   const labels = releaseLabels(releases);
   const siteNames = new Map(memberships.map((member) => [member.site_id, visibleName(member.display_name)]));
-  return <section className="version-overview__pane version-table"><div className="version-overview__pane-head"><h3>联邦版本来源</h3><span>{releases.length}</span></div>
+  return <section className="table-wrap version-table"><div className="section-head"><div><p className="eyebrow">已生成版本</p><h2>联邦版本</h2></div><span>{releases.length} 个版本</span></div>
     <div className="version-table__scroll"><table><thead><tr><th>版本编号</th><th>生成时间</th><th>使用的站点数据</th></tr></thead><tbody>{releases.map((release) => <tr className={release.release_id === selectedId ? "selected" : ""} key={release.release_id}>
       <td><button type="button" className="release-select" aria-pressed={release.release_id === selectedId} title={release.release_id} onClick={() => onSelect(release.release_id)}><code translate="no">{labels.get(release.release_id)}</code><small>{release.release_id === selectedId ? "已选择" : "选择"}</small></button></td>
       <td><time>{formatTime(release.created_at)}</time></td>
@@ -680,10 +672,7 @@ function VersionManagement({ appId, federationId, topology, submissions, release
 
   return <div className="version-workbench">
     {message && <p className={`message message--${message.tone}`} role={message.tone === "error" ? "alert" : "status"}>{message.text}<button onClick={() => setMessage(null)} aria-label="关闭消息">×</button></p>}
-    <section className="version-overview">
-      <div className="version-overview__head"><h2>版本总览</h2><div><span>{topology.memberships.length} 个站点</span><span>{releases.length} 个联邦版本</span></div></div>
-      <div className="version-overview__grid"><CurrentSiteVersions memberships={topology.memberships} /><FederationVersionTable memberships={topology.memberships} releases={releases} batchNumbers={batchNumbers} selectedId={selectedId} onSelect={setSelectedId} /></div>
-    </section>
+    <FederationVersionTable memberships={topology.memberships} releases={releases} batchNumbers={batchNumbers} selectedId={selectedId} onSelect={setSelectedId} />
     <div className="version-workbench__top">
       <section className="version-panel contribution-panel">
         <div className="section-head"><div><p className="eyebrow">生成输入</p><h2>选择站点上传批次</h2></div><span>已选 {selectedInputs.length} / {contributions.length}</span></div>
