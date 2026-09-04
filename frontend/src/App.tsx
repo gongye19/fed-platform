@@ -568,7 +568,7 @@ function FederationVersionTable({ releases, siteNames, dataNames, versionNames }
 }) {
   return <section className="table-wrap version-table"><div className="section-head"><div><p className="eyebrow">已生成版本</p><h2>联邦版本</h2></div><span>{releases.length} 个版本</span></div>
     <div className="version-table__scroll"><table><thead><tr><th>版本编号</th><th>生成时间</th><th>使用的站点数据</th></tr></thead><tbody>{releases.map((release) => <tr key={release.release_id}>
-      <td><code className="release-code" translate="no">{versionNames.get(release.release_id) || "数据未关联"}</code></td>
+      <td><strong translate="no">{versionNames.get(release.release_id) || "数据未关联"}</strong></td>
       <td><time>{formatTime(release.created_at)}</time></td>
       <td><div className="version-table__items">{release.inputs?.length > 0 ? release.inputs.map((input) => <span key={input.submission_id}><strong>{dataNames.get(input.submission_id) || "数据未编号"}</strong><small>{siteNames.get(input.site_id) || "站点未编号"}</small></span>) : <em>输入未关联</em>}</div></td>
     </tr>)}</tbody></table></div>
