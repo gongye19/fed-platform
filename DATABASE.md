@@ -49,8 +49,8 @@ Application ──1:1── Federation ──1:1── FederationAgent
      └── Federation
           ├── Artifact ◀── Submission ── Site
           ├── Task ───────────────────── Site
-          ├── Release ── ReleaseArtifact ── Artifact
-          │      └── Delivery ─────────── Site
+          ├── Submission ── ReleaseInput ── Release ── ReleaseArtifact ── Artifact
+          │                                  └── Delivery ─────────────── Site
           ├── Event / Command / AgentJob
           └── PluginBinding / PluginState
 ```
@@ -65,6 +65,7 @@ Application 中重复，但它们在主键、外键、查询和对象存储路�
 - `app_id / federation_id / site_id / type_name`：协议中的稳定字符串 ID，注册后不可改名。
 - `artifact_digest`：`sha256:<64 hex>`，内容改变就产生新 Artifact。
 - Submission、Task、Release、Delivery、Event、Command、Job：服务端生成 UUID v4。
+- Submission 在站点内另有稳定批次编号；Release 在联邦域内另有稳定中性编号。编号只用于识别和溯源，不表达质量高低。
 - Command cursor：PostgreSQL `BIGINT GENERATED ALWAYS AS IDENTITY`，只要求单调，不要求连续。
 - 时间统一使用 `TIMESTAMPTZ` 和 UTC；前端负责按用户时区展示。
 - 状态使用 `TEXT + CHECK`，不用难迁移的 PostgreSQL ENUM。
@@ -97,11 +98,12 @@ Application 中重复，但它们在主键、外键、查询和对象存储路�
 |---|---|---|
 | `artifacts` | digest、type、size、metadata、storage_key | `(app_id, federation_id, digest)` 主键；不可变 |
 | `artifact_lineage` | 新 Artifact 由哪些输入 Artifact 产生 | 父子必须在同一 app/federation |
-| `submissions` | 哪个 Site 在何时提交了哪个 Artifact | 按 Site 的 idempotency key 唯一 |
+| `submissions` | 哪个 Site 在何时提交了哪个 Artifact、站点内批次编号 | 按 Site 的 idempotency key 与批次编号唯一 |
 | `tasks` | Task 类型、目标 Site、输入引用、当前状态 | 必须关联有效 Membership |
-| `releases` | 不可变发布头、创建者、创建时间 | 属于一个 app/federation |
+| `releases` | 不可变发布头、中性编号、生成任务、创建时间 | 属于一个 app/federation；生成任务至多产生一个版本 |
+| `release_inputs` | 每个 Release 精确使用的 Submission 及顺序 | Release 与 Submission 多对多 |
 | `release_artifacts` | Release 包含的 Artifact 快照 | 只允许同作用域 Artifact |
-| `deliveries` | Release 到每个目标 Site 的当前状态 | `(release_id, site_id)` 唯一 |
+| `deliveries` | Release 实际下发到哪些 Site、下发时间与当前状态 | `(release_id, site_id)` 唯一；点击下发时才创建 |
 | `events` | 上行事件和状态迁移历史 | append-only、event_id 幂等 |
 | `commands` | 下行 Task/Release 命令及 cursor/ack | 按 Site + cursor 拉取 |
 | `agent_jobs` | PostgreSQL 后台队列、重试与 lease | Worker 用 `SKIP LOCKED` 领取 |
@@ -246,8 +248,9 @@ agent_jobs              唤醒对应 FederationAgent
 
 ### 创建 Release
 
-同一事务写入不可变 `releases`、`release_artifacts`，为每个有 `can_receive` 的目标 Site 创建
-`deliveries` 和 `commands`。任何目标越权或 Artifact 跨作用域，整个 Release 创建失败。
+Agent 生成成功后，同一事务写入不可变 `releases`、`release_inputs` 和 `release_artifacts`；此时不预设目标站点。
+管理员可以从任意站点的任意贡献批次组合生成版本，也可以把任意版本下发给任意有接收权限的站点。
+点击下发时才为实际目标写入 `deliveries` 和 `commands`。任何目标越权或 Artifact 跨作用域，整个事务失败。
 
 ### Delivery 状态变化
 

@@ -167,6 +167,12 @@ class ReleaseCreate(BaseModel):
         return self
 
 
+class GeneratedReleaseCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    generation_job_id: UUID | None = None
+
+
 class DeliveryAction(BaseModel):
     site_ids: list[StableId] = Field(default_factory=list, max_length=100)
 

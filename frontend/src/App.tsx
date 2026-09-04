@@ -1,6 +1,6 @@
 import { FormEvent, lazy, ReactNode, Suspense, useEffect, useRef, useState, type MouseEvent } from "react";
-import { buildEvaluationTrend, buildSiteTracks, groupEvaluationResults, latestEvaluationRows, type EvaluationRow, type SiteTrackNode } from "./evaluation";
-import { latestReleaseGroup, releaseLabels, siteContributionRows } from "./versions";
+import { buildEvaluationTrend, groupEvaluationResults, latestEvaluationRows, type EvaluationRow } from "./evaluation";
+import { latestReleaseGroup, releaseLabels } from "./versions";
 
 const PlatformOverview = lazy(() => import("./PlatformOverview"));
 
@@ -38,6 +38,7 @@ type Topology = {
 };
 type Submission = {
   submission_id: string;
+  submission_number: number;
   site_id: string;
   artifact_digest: string;
   status: string;
@@ -51,6 +52,8 @@ type Submission = {
 };
 type ReleaseSummary = {
   release_id: string;
+  release_number: number;
+  generation_job_id: string | null;
   created_at: string;
   artifact_digests: string[];
   delivery_count: number;
@@ -61,21 +64,20 @@ type ReleaseSummary = {
   rolled_back: number;
   version_label: string | null;
   algorithm_id: string | null;
-  deliveries?: Delivery[];
+  inputs: ReleaseInput[];
+  deliveries: Delivery[];
 };
+type ReleaseInput = Pick<Submission, "submission_id" | "submission_number" | "site_id" | "artifact_digest" | "created_at">;
 type Delivery = {
   delivery_id: string;
   site_id: string;
   state: string;
   failed_action: string | null;
   last_error: string | null;
+  targeted_at: string;
+  is_current: boolean;
+  has_used: boolean;
   updated_at: string;
-};
-type ReleaseDetail = {
-  release_id: string;
-  created_at: string;
-  artifacts: Array<Submission & { digest: string }>;
-  deliveries: Delivery[];
 };
 type Activity = {
   created_at: string;
@@ -211,14 +213,10 @@ function resultLabel(result: string) {
   return ({ success: "成功", failed: "失败", pending: "等待" } as Record<string, string>)[result] || result;
 }
 
-function deliveryStateLabel(value: string) {
-  return ({ pending: "待分发", staged: "已暂存", active: "已启用", failed: "失败", rolled_back: "已回滚" } as Record<string, string>)[value] || value;
-}
-
 function Status({ value }: { value: string }) {
-  const tone = ["failed", "disabled", "offline", "reject", "失败", "下降"].includes(value)
+  const tone = ["failed", "disabled", "offline", "reject", "失败", "下降", "下发失败", "站点处理失败"].includes(value)
     ? "bad"
-    : ["pending", "running", "staged", "retry", "等待", "尚未连接", "待分发", "已暂存", "未提交", "尚未提交", "等待新数据", "尚未上报"].includes(value)
+    : ["pending", "running", "staged", "retry", "等待", "等待接收", "已接收，未采用", "尚未连接", "待分发", "已暂存", "未提交", "尚未提交", "等待新数据", "尚未上报"].includes(value)
       ? "waiting"
       : "ok";
   const label = ({ active: "运行中", disabled: "已停用", failed: "失败", idle: "空闲", offline: "离线", online: "在线", pending: "等待", retry: "重试中", running: "处理中", staged: "已暂存" } as Record<string, string>)[value] || value;
@@ -417,7 +415,7 @@ type ChannelResource = "evaluations" | "submissions" | "releases" | "activities"
 function sectionResources(section: AppSection): ChannelResource[] {
   if (section === "overview") return ["releases"];
   if (section === "evaluations") return ["evaluations"];
-  if (section === "versions") return ["submissions", "releases", "activities"];
+  if (section === "versions") return ["submissions", "releases"];
   return ["releases", "activities"];
 }
 
@@ -485,7 +483,7 @@ function ApplicationDetail({ appId, section, navigate }: { appId: string; sectio
     {sectionLoading ? <SectionLoading /> : <>
       {section === "overview" && <div className="panel-stack"><ApplicationSites topology={topology} releases={currentFederationReleases} /></div>}
       {section === "evaluations" && <Evaluations items={evaluations} memberships={topology.memberships} />}
-      {section === "versions" && <VersionManagement appId={appId} federationId={federationId} topology={topology} submissions={submissions} releases={currentFederationReleases} activities={currentFederationActivities} onRefresh={async () => { await Promise.all([loadTopology(true), ...(["submissions", "releases", "activities"] as ChannelResource[]).map((resource) => loadResource(resource, true))]); }} />}
+      {section === "versions" && <VersionManagement appId={appId} federationId={federationId} topology={topology} submissions={submissions} releases={currentFederationReleases} onRefresh={async () => { await Promise.all([loadTopology(true), ...(["submissions", "releases"] as ChannelResource[]).map((resource) => loadResource(resource, true))]); }} />}
       {section === "timeline" && <ActivityTimeline items={activities} memberships={topology.memberships} releases={currentFederationReleases} />}
       {section === "logs" && <ActivityLog items={activities} memberships={topology.memberships} releases={currentFederationReleases} />}
     </>}
@@ -556,67 +554,45 @@ function EffectChart({ rows, siteNames }: { rows: EvaluationRow[]; siteNames: Re
   </section>;
 }
 
-function trackNodeLabel(node: SiteTrackNode) {
-  return ({
-    included: "已参与本次联邦",
-    available: "有数据，但未纳入本次联邦",
-    missing: "本次未上传数据",
-    not_selected: "未选择该站点下发",
-    queued: "已发送，等待站点接收",
-    received: "站点已接收版本",
-    failed: "下发失败",
-    using: "当前正在使用",
-    used: "曾使用，之后更新到新版本",
-    kept_previous: "已收到，但仍保留原版本",
-    rolled_back: "使用后已回退",
-    unknown: "站点尚未上报是否采用",
-    not_applicable: "本节点无需执行",
-    returned: "已返回测试结果",
-    waiting: "尚未返回测试结果",
-  } as const)[node.state];
+function batchLabel(value: number) {
+  return `批次 #${String(value).padStart(3, "0")}`;
 }
 
-function trackNodeTone(node: SiteTrackNode) {
-  if (["included", "received", "using", "used", "returned"].includes(node.state)) return "complete";
-  if (["failed", "rolled_back"].includes(node.state)) return "failed";
-  if (["available", "queued", "kept_previous", "unknown", "waiting"].includes(node.state)) return "waiting";
-  return "inactive";
+function deliveryLabel(delivery: Delivery) {
+  if (delivery.state === "failed") return delivery.failed_action === "stage" ? "下发失败" : "站点处理失败";
+  if (delivery.state === "pending") return "等待接收";
+  if (delivery.is_current) return "正在使用";
+  if (delivery.has_used) return "曾使用，已切换";
+  return "已接收，未采用";
 }
 
-const trackGuide: Array<{ kind: SiteTrackNode["kind"]; label: string; description: string }> = [
-  { kind: "contribution", label: "待联邦数据", description: "站点提交本轮输入" },
-  { kind: "distribute", label: "联邦版本下发", description: "平台发送版本到站点" },
-  { kind: "update", label: "联邦版本更新", description: "站点确认使用该版本" },
-  { kind: "evaluation", label: "测试结果返回", description: "站点返回该版本评测" },
-];
-
-function SiteOperationTracks({ memberships, releases, activities, submissions }: { memberships: Membership[]; releases: ReleaseSummary[]; activities: Activity[]; submissions: Submission[] }) {
+function FederationLineage({ releases, memberships, selectedId, onSelect }: {
+  releases: ReleaseSummary[];
+  memberships: Membership[];
+  selectedId: string;
+  onSelect: (releaseId: string) => void;
+}) {
   const timelineRef = useRef<HTMLDivElement>(null);
   const ordered = releases.slice().sort((left, right) => left.created_at.localeCompare(right.created_at));
-  const releaseNames = Object.fromEntries(releaseLabels(releases));
-  const currentReports = Object.fromEntries(memberships.map((member) => [member.site_id, { releaseId: member.reported_release_id, reportedAt: member.federation_version_reported_at }]));
-  const tracks = buildSiteTracks(memberships.map((member) => member.site_id), activities, releases, currentReports, submissions);
-  const members = Object.fromEntries(memberships.map((member) => [member.site_id, member]));
+  const labels = releaseLabels(releases);
+  const siteNames = new Map(memberships.map((member) => [member.site_id, visibleName(member.display_name)]));
   useEffect(() => {
     const timeline = timelineRef.current;
     if (timeline) timeline.scrollLeft = timeline.scrollWidth;
   }, [releases.length]);
-  return <section className="version-panel track-panel"><div className="section-head"><div><p className="eyebrow">联邦过程</p><h2>站点运行轨迹</h2></div><span>最新版本在右侧</span></div>
-    <div className="track-guide">{trackGuide.map((item) => <div key={item.kind}><i className={`track-mark track-mark--${item.kind}`} aria-hidden="true" /><span><strong>{item.label}</strong><small>{item.description}</small></span></div>)}</div>
-    <div className="track-state-guide" aria-label="节点状态说明"><span><i className="track-state track-state--complete" aria-hidden="true" />完成</span><span><i className="track-state track-state--waiting" aria-hidden="true" />等待或保留旧版</span><span><i className="track-state track-state--failed" aria-hidden="true" />失败或回退</span><span><i className="track-state track-state--inactive" aria-hidden="true" />未参与或未上报</span></div>
-    {tracks.length === 0 ? <Empty>还没有站点接入这个应用。</Empty> : releases.length === 0 ? <Empty>还没有可追踪的联邦版本。</Empty> : <div className="track-table__viewport" ref={timelineRef}><div className="track-table" style={{ gridTemplateColumns: `200px repeat(${ordered.length}, 216px)` }}>
-      <div className="track-table__corner">站点</div>
-      {ordered.map((release) => <div className="track-table__version" key={release.release_id}><strong>{releaseNames[release.release_id]}</strong><time>{formatTime(release.created_at)}</time></div>)}
-      {tracks.map((track) => {
-        const member = members[track.siteId];
-        const current = member.reported_release_id ? releaseNames[member.reported_release_id] || "历史版本" : "尚未上报";
-        return <div className="track-table__row" key={track.siteId}>
-          <div className="track-table__site"><strong>{visibleName(member.display_name)}</strong><span>当前 {current}</span></div>
-          {ordered.map((release, releaseIndex) => <div className="track-cycle" key={release.release_id} role="group" aria-label={`${visibleName(member.display_name)} ${releaseNames[release.release_id]}`}>
-            {track.nodes.slice(releaseIndex * 4, releaseIndex * 4 + 4).map((node) => <span className="track-cycle__node" key={node.kind} title={trackNodeLabel(node)} role="img" aria-label={`${trackGuide.find((item) => item.kind === node.kind)?.label}：${trackNodeLabel(node)}`}><i className={`track-mark track-mark--${node.kind} track-mark--${trackNodeTone(node)}`} aria-hidden="true" /></span>)}
-          </div>)}
-        </div>;
-      })}
+  return <section className="version-panel lineage-panel"><div className="section-head"><div><p className="eyebrow">可追溯关系</p><h2>版本谱系与站点轨迹</h2></div><span>最新版本在右侧</span></div>
+    <div className="lineage-legend"><span><i className="lineage-key lineage-key--input" aria-hidden="true" />生成输入</span><span><i className="lineage-key lineage-key--version" aria-hidden="true" />联邦版本</span><span><i className="lineage-key lineage-key--target" aria-hidden="true" />实际下发与采用</span></div>
+    {ordered.length === 0 ? <Empty>还没有生成联邦版本。</Empty> : <div className="lineage-viewport" ref={timelineRef}><div className="lineage-strip">
+      {ordered.map((release) => <article className={release.release_id === selectedId ? "lineage-card selected" : "lineage-card"} key={release.release_id}>
+        <button type="button" className="lineage-card__head" aria-pressed={release.release_id === selectedId} onClick={() => onSelect(release.release_id)}><span className="lineage-card__point" aria-hidden="true" /><strong>{labels.get(release.release_id)}</strong><time>{formatTime(release.created_at)}</time></button>
+        <div className="lineage-flow">
+          <div className="lineage-group"><small>生成输入</small><div className="lineage-chips">{release.inputs?.length > 0 ? release.inputs.map((input) => <span className="lineage-chip lineage-chip--input" key={input.submission_id}>{siteNames.get(input.site_id) || input.site_id}<b>{batchLabel(input.submission_number)}</b></span>) : <span className="lineage-empty">历史输入未关联</span>}</div></div>
+          <span className="lineage-arrow" aria-hidden="true">↓</span>
+          <div className="lineage-artifact"><small>联邦版本</small><strong>{labels.get(release.release_id)}</strong></div>
+          <span className="lineage-arrow" aria-hidden="true">↓</span>
+          <div className="lineage-group"><small>实际下发</small><div className="lineage-chips">{release.deliveries?.length > 0 ? release.deliveries.map((delivery) => <span className={`lineage-chip lineage-chip--${delivery.state === "failed" ? "failed" : delivery.is_current ? "current" : "target"}`} key={delivery.delivery_id}>{siteNames.get(delivery.site_id) || delivery.site_id}<b>{deliveryLabel(delivery)}</b></span>) : <span className="lineage-empty">尚未下发</span>}</div></div>
+        </div>
+      </article>)}
     </div></div>}
   </section>;
 }
@@ -629,57 +605,47 @@ function Evaluations({ items, memberships }: { items: Submission[]; memberships:
   return <div className="panel-stack"><EffectChart rows={rows} siteNames={siteNames} /><section className="table-wrap"><div className="section-head"><div><p className="eyebrow">每轮站点结果</p><h2>结果明细</h2></div><span>{rows.length} 条结果</span></div><table><thead><tr><th>轮次</th><th>站点</th><th>联邦前</th><th>联邦后</th><th>结果</th><th>上传时间</th></tr></thead><tbody>{rows.map((row) => { const change = row.baseline === null || row.candidate === null ? null : row.candidate - row.baseline; const result = change === null ? "等待联邦结果" : change > 0.0001 ? "提升" : change < -0.0001 ? "下降" : "持平"; return <tr key={row.key}><td>{rounds.get(row.roundId) || "本轮"}</td><td><strong>{siteNames[row.siteId] || "站点"}</strong></td><td>{percent(row.baseline)}</td><td>{percent(row.candidate)}</td><td><span className={`evaluation-result evaluation-result--${result === "提升" ? "up" : result === "下降" ? "down" : result === "持平" ? "same" : "waiting"}`}>{result}</span></td><td>{formatTime(row.createdAt)}</td></tr>; })}</tbody></table>{rows.length === 0 && <Empty>还没有站点上传效果结果。</Empty>}</section></div>;
 }
 
-function VersionManagement({ appId, federationId, topology, submissions, releases, activities, onRefresh }: {
+function VersionManagement({ appId, federationId, topology, submissions, releases, onRefresh }: {
   appId: string;
   federationId: string;
   topology: Topology;
   submissions: Submission[];
   releases: ReleaseSummary[];
-  activities: Activity[];
   onRefresh: () => Promise<void>;
 }) {
   const [selectedId, setSelectedId] = useState(releases[0]?.release_id || "");
+  const contributions = submissions.filter((item) => item.purpose === "contribution" && item.status === "accepted");
+  const usedInputs = new Set(releases.flatMap((release) => (release.inputs || []).map((input) => input.submission_id)));
+  const [selectedInputs, setSelectedInputs] = useState<string[]>(() => contributions.filter((item) => !usedInputs.has(item.submission_id)).map((item) => item.submission_id));
+  const selectedInputSet = new Set(selectedInputs);
   const [selectedSites, setSelectedSites] = useState<string[]>([]);
-  const [detail, setDetail] = useState<ReleaseDetail | null>(null);
   const [busy, setBusy] = useState<"generate" | "distribute" | "">("");
   const [message, setMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null);
   const base = `/admin/v1/apps/${encodeURIComponent(appId)}/federations/${encodeURIComponent(federationId)}`;
-  const latestRelease = releases[0] || null;
-  const contributionRows = siteContributionRows(topology.memberships, submissions, latestRelease?.created_at || null);
-  const newCount = contributionRows.filter((row) => row.state === "new").length;
   const selected = releases.find((release) => release.release_id === selectedId) || null;
-  const selectedDetail = detail?.release_id === selectedId ? detail : null;
-  const requestedStageSites = new Set(activities.filter((item) => item.action === "release.stage.requested" && item.target_id === selectedId && Array.isArray(item.detail.site_ids)).flatMap((item) => item.detail.site_ids as string[]));
-  const stageableSites = selectedDetail?.deliveries.filter((delivery) => (delivery.state === "pending" && !requestedStageSites.has(delivery.site_id)) || (delivery.state === "failed" && delivery.failed_action === "stage")).map((delivery) => delivery.site_id) || [];
+  const deliveredSites = new Set((selected?.deliveries || []).filter((delivery) => delivery.state !== "failed" || delivery.failed_action !== "stage").map((delivery) => delivery.site_id));
+  const stageableSites = topology.memberships.filter((member) => member.can_receive && !deliveredSites.has(member.site_id)).map((member) => member.site_id);
   const labels = releaseLabels(releases);
+  const siteNames = new Map(topology.memberships.map((member) => [member.site_id, visibleName(member.display_name)]));
+  const useCount = new Map<string, number>();
+  releases.forEach((release) => (release.inputs || []).forEach((input) => useCount.set(input.submission_id, (useCount.get(input.submission_id) || 0) + 1)));
 
   useEffect(() => {
     if (!selectedId || !releases.some((release) => release.release_id === selectedId)) {
       setSelectedId(releases[0]?.release_id || "");
     }
   }, [releases, selectedId]);
-  useEffect(() => {
-    if (!selectedId) { setDetail(null); return; }
-    let cancelled = false;
-    setDetail(null);
-    void api<ReleaseDetail>(`${base}/releases/${selectedId}`)
-      .then((next) => { if (!cancelled) setDetail(next); })
-      .catch((reason) => { if (!cancelled) setMessage({ tone: "error", text: reason instanceof Error ? reason.message : "版本加载失败" }); });
-    return () => { cancelled = true; };
-  }, [base, selectedId]);
-  useEffect(() => { setSelectedSites(stageableSites); }, [selectedId, stageableSites.join("|")]);
+  useEffect(() => { setSelectedSites([]); }, [selectedId]);
 
   async function generate() {
     setBusy("generate");
     setMessage(null);
     try {
-      const readySubmissions = contributionRows.flatMap((row) => row.state === "new" && row.submission ? [row.submission] : []);
-      const roundIds = [...new Set(readySubmissions.map((item) => item.metadata.round_id).filter((value): value is string => typeof value === "string"))];
-      if (roundIds.length !== 1) throw new Error("站点提交不属于同一个有效轮次");
+      const readySubmissions = contributions.filter((item) => selectedInputSet.has(item.submission_id));
       const requested = await api<AgentJob>(`${base}/agent/generations`, {
         method: "POST",
         body: JSON.stringify({
-          round_id: roundIds[0],
+          round_id: `selection-${Date.now().toString(36)}`,
           submission_ids: readySubmissions.map((item) => item.submission_id),
         }),
       });
@@ -689,9 +655,10 @@ function VersionManagement({ appId, federationId, topology, submissions, release
         job = await api<AgentJob>(`${base}/agent/jobs/${requested.job_id}`);
       }
       if (job.status !== "succeeded") throw new Error(job.last_error || "联邦 Agent 生成超时");
-      const release = await api<{ release_id: string }>(`${base}/releases/generate`, { method: "POST" });
+      const release = await api<{ release_id: string }>(`${base}/releases/generate`, { method: "POST", body: JSON.stringify({ generation_job_id: requested.job_id }) });
       await onRefresh();
       setSelectedId(release.release_id);
+      setSelectedInputs([]);
       setMessage({ tone: "success", text: "新的联邦版本已生成。" });
     } catch (reason) {
       setMessage({ tone: "error", text: reason instanceof Error ? reason.message : "联邦生成失败" });
@@ -709,7 +676,7 @@ function VersionManagement({ appId, federationId, topology, submissions, release
       });
       setMessage({ tone: "success", text: `已向 ${selectedSites.length} 个站点发出下发命令。` });
       await onRefresh();
-      setDetail(await api<ReleaseDetail>(`${base}/releases/${selected.release_id}`));
+      setSelectedSites([]);
     } catch (reason) {
       setMessage({ tone: "error", text: reason instanceof Error ? reason.message : "版本下发失败" });
     } finally { setBusy(""); }
@@ -719,28 +686,23 @@ function VersionManagement({ appId, federationId, topology, submissions, release
     {message && <p className={`message message--${message.tone}`} role={message.tone === "error" ? "alert" : "status"}>{message.text}<button onClick={() => setMessage(null)} aria-label="关闭消息">×</button></p>}
     <div className="version-workbench__top">
       <section className="version-panel contribution-panel">
-        <div className="section-head"><div><p className="eyebrow">下一联邦版本</p><h2>待联邦数据</h2></div><span>{newCount} / {contributionRows.length} 可用于生成</span></div>
-        <div className="contribution-list">{contributionRows.map((row) => <div key={row.site_id}><span><strong>{visibleName(row.display_name)}</strong></span><span><Status value={row.state === "new" ? "可用于生成" : row.state === "included" ? "等待新数据" : "尚未提交"} /><time>{row.submission ? formatTime(row.submission.created_at) : "暂无"}</time></span></div>)}</div>
-        {contributionRows.length === 0 && <Empty>还没有站点接入这个应用。</Empty>}
-        <div className="version-panel__action"><span>{newCount > 0 ? `将使用 ${newCount} 个站点的新数据，其他站点本次不参与。` : "至少需要 1 个站点上传新数据。"}</span><button className="button button--primary" type="button" disabled={newCount === 0 || busy !== ""} onClick={generate}>{busy === "generate" ? "生成中…" : "联邦生成"}</button></div>
+        <div className="section-head"><div><p className="eyebrow">生成输入</p><h2>选择站点上传批次</h2></div><span>已选 {selectedInputs.length} / {contributions.length}</span></div>
+        <div className="batch-list">{contributions.map((submission) => <label key={submission.submission_id} className={selectedInputSet.has(submission.submission_id) ? "batch-option selected" : "batch-option"}><input type="checkbox" name="generation-input" value={submission.submission_id} checked={selectedInputSet.has(submission.submission_id)} onChange={(event) => setSelectedInputs((current) => event.target.checked ? [...current, submission.submission_id] : current.filter((item) => item !== submission.submission_id))} /><span><strong>{siteNames.get(submission.site_id) || submission.site_id}</strong><small>{batchLabel(submission.submission_number)} · {formatTime(submission.created_at)}</small></span><em>{useCount.get(submission.submission_id) ? `已用于 ${useCount.get(submission.submission_id)} 个版本` : "尚未使用"}</em></label>)}</div>
+        {contributions.length === 0 && <Empty>还没有站点上传可联邦数据。</Empty>}
+        <div className="version-panel__action"><button className="text-button" type="button" disabled={contributions.length === 0 || busy !== ""} onClick={() => setSelectedInputs(contributions.filter((item) => !usedInputs.has(item.submission_id)).map((item) => item.submission_id))}>选择尚未使用的批次</button><button className="button button--primary" type="button" disabled={selectedInputs.length === 0 || busy !== ""} onClick={generate}>{busy === "generate" ? "生成中…" : `用 ${selectedInputs.length} 个批次生成`}</button></div>
       </section>
 
-      <section className="version-panel version-library">
-        <div className="section-head"><div><p className="eyebrow">可下发</p><h2>联邦版本库</h2></div><span>{releases.length} 个联邦版本</span></div>
-        <div className="version-options">{releases.map((release) => {
-          const requested = new Set(activities.filter((item) => item.action === "release.stage.requested" && item.target_id === release.release_id && Array.isArray(item.detail.site_ids)).flatMap((item) => item.detail.site_ids as string[]));
-          const failed = (release.deliveries || []).filter((delivery) => requested.has(delivery.site_id) && delivery.state === "failed").length;
-          const waiting = (release.deliveries || []).filter((delivery) => requested.has(delivery.site_id) && delivery.state === "pending").length;
-          const deliveryLabel = requested.size === 0 ? "未下发" : failed > 0 ? `${failed} 个失败` : waiting > 0 ? `${waiting} 个等待` : `${requested.size} 个已接收`;
-          return <button key={release.release_id} type="button" className={release.release_id === selectedId ? "version-option selected" : "version-option"} aria-pressed={release.release_id === selectedId} onClick={() => setSelectedId(release.release_id)}><span className="version-option__radio" aria-hidden="true" /><span><strong>{labels.get(release.release_id)}</strong><small>{formatTime(release.created_at)}</small></span><span className="version-option__delivery">{deliveryLabel}</span></button>;
-        })}</div>
-        {releases.length === 0 && <Empty>还没有生成联邦版本。</Empty>}
-        {selected && detail && stageableSites.length > 0 && <fieldset className="delivery-targets"><legend>选择下发站点</legend>{stageableSites.map((siteId) => <label key={siteId}><input type="checkbox" name="delivery-site" value={siteId} checked={selectedSites.includes(siteId)} onChange={(event) => setSelectedSites((current) => event.target.checked ? [...current, siteId] : current.filter((item) => item !== siteId))} /><span>{visibleName(topology.memberships.find((member) => member.site_id === siteId)?.display_name || siteId)}</span></label>)}</fieldset>}
-        <div className="version-panel__action"><span>{selected ? `已选择 ${labels.get(selected.release_id) || "联邦版本"}` : "先选择一个版本"}</span><button className="button" type="button" disabled={!selected || !detail || selectedSites.length === 0 || busy !== ""} onClick={distribute}>{busy === "distribute" ? "下发中…" : stageableSites.length > 0 ? `下发至 ${selectedSites.length} 个站点` : "暂无待下发站点"}</button></div>
+      <section className="version-panel distribution-panel">
+        <div className="section-head"><div><p className="eyebrow">下发控制</p><h2>{selected ? `联邦版本 ${labels.get(selected.release_id)}` : "选择联邦版本"}</h2></div><span>{selected ? `${selected.inputs?.length || 0} 个输入批次` : "暂无版本"}</span></div>
+        {selected ? <>
+          <div className="delivery-history"><h3>已下发站点</h3>{selected.deliveries?.length > 0 ? selected.deliveries.map((delivery) => <div key={delivery.delivery_id}><span><strong>{siteNames.get(delivery.site_id) || delivery.site_id}</strong><small>{formatTime(delivery.targeted_at)}</small></span><Status value={deliveryLabel(delivery)} /></div>) : <p>这个版本尚未下发。</p>}</div>
+          {stageableSites.length > 0 && <fieldset className="delivery-targets"><legend>新增下发目标</legend>{stageableSites.map((siteId) => <label key={siteId}><input type="checkbox" name="delivery-site" value={siteId} checked={selectedSites.includes(siteId)} onChange={(event) => setSelectedSites((current) => event.target.checked ? [...current, siteId] : current.filter((item) => item !== siteId))} /><span>{siteNames.get(siteId) || siteId}</span></label>)}</fieldset>}
+        </> : <Empty>生成版本后，可以选择任意站点下发。</Empty>}
+        <div className="version-panel__action"><span>{selectedSites.length > 0 ? `将下发给 ${selectedSites.length} 个站点` : stageableSites.length > 0 ? "请选择下发目标" : "所有可用站点均已下发"}</span><button className="button" type="button" disabled={!selected || selectedSites.length === 0 || busy !== ""} onClick={distribute}>{busy === "distribute" ? "下发中…" : "下发所选版本"}</button></div>
       </section>
     </div>
 
-    <SiteOperationTracks memberships={topology.memberships} releases={releases} activities={activities} submissions={submissions} />
+    <FederationLineage memberships={topology.memberships} releases={releases} selectedId={selectedId} onSelect={setSelectedId} />
   </div>;
 }
 

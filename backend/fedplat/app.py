@@ -32,6 +32,7 @@ from fedplat.protocol import (
     Digest,
     FedAppManifest,
     FederationGenerationRequest,
+    GeneratedReleaseCreate,
     ReleaseCreate,
     SiteStatusReport,
     StableId,
@@ -531,10 +532,22 @@ def generate_release(
     app_id: StableId,
     federation_id: StableId,
     db: Annotated[Database, Depends(get_database)],
+    body: GeneratedReleaseCreate | None = None,
 ) -> dict[str, Any]:
     try:
-        digest = db.next_unreleased_release_artifact(app_id, federation_id)
-        return db.create_release(app_id, federation_id, [digest], [])
+        source = db.next_unreleased_release(
+            app_id,
+            federation_id,
+            body.generation_job_id if body else None,
+        )
+        return db.create_release(
+            app_id,
+            federation_id,
+            source["artifact_digests"],
+            None,
+            generation_job_id=source.get("generation_job_id"),
+            input_submission_ids=source.get("submission_ids", []),
+        )
     except (ConflictError, NotFoundError, ForbiddenError) as exc:
         map_store_error(exc)
 
@@ -713,6 +726,7 @@ def submit_artifact(
     response.status_code = 201 if created else 200
     return {
         "submission_id": submission["submission_id"],
+        "submission_number": submission["submission_number"],
         "artifact_digest": submission["artifact_digest"],
         "created_at": submission["created_at"],
         "created": created,

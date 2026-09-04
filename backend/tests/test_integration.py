@@ -238,6 +238,7 @@ def test_registry_and_artifact_submission(live_stack):
 
     submitted = upload("submission-1")
     assert submitted.status_code == 201 and submitted.json()["created"] is True
+    assert submitted.json()["submission_number"] == 1
     repeated = upload("submission-1")
     assert repeated.status_code == 200 and repeated.json()["created"] is False
     assert repeated.json()["submission_id"] == submitted.json()["submission_id"]
@@ -298,6 +299,12 @@ def test_registry_and_artifact_submission(live_stack):
     )
     assert release.status_code == 201
     release_id = release.json()["release_id"]
+    assert release.json()["release_number"] == 1
+    listed_release = client.get(
+        f"/admin/v1/apps/{app_id}/federations/default/releases", headers=admin
+    ).json()["items"][0]
+    assert listed_release["inputs"] == []
+    assert listed_release["deliveries"] == []
     assert client.post(
         f"/admin/v1/apps/{app_id}/federations/default/releases/generate",
         headers=admin,

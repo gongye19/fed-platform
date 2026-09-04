@@ -442,11 +442,16 @@ class Database:
             if not previous:
                 raise NotFoundError("site membership is created by its first artifact upload")
             if active_release_id and not conn.execute(
-                """SELECT 1 FROM releases
-                   WHERE release_id = %s AND app_id = %s AND federation_id = %s""",
-                (active_release_id, app_id, federation_id),
+                """SELECT 1
+                   FROM deliveries d
+                   JOIN releases r USING (release_id)
+                   WHERE d.release_id = %s AND d.site_id = %s
+                     AND d.targeted_at IS NOT NULL
+                     AND d.state IN ('staged', 'active', 'rolled_back')
+                     AND r.app_id = %s AND r.federation_id = %s""",
+                (active_release_id, site_id, app_id, federation_id),
             ).fetchone():
-                raise ConflictError("active release does not belong to this application")
+                raise ConflictError("site may only use a version successfully delivered to it")
             conn.execute(
                 """UPDATE sites SET display_name = %s, last_seen_at = now()
                    WHERE site_id = %s""",
@@ -820,18 +825,38 @@ class Database:
 
             self._upsert_artifact(conn, app_id, federation_id, descriptor, storage_key)
 
+            conn.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                (f"submission\n{app_id}\n{federation_id}\n{site_id}",),
+            )
+            submission_number = conn.execute(
+                """SELECT coalesce(max(submission_number), 0) + 1 AS value
+                   FROM submissions
+                   WHERE app_id = %s AND federation_id = %s AND site_id = %s""",
+                (app_id, federation_id, site_id),
+            ).fetchone()["value"]
             submission_id = uuid.uuid4()
             submission = conn.execute(
                 """INSERT INTO submissions
-                   (submission_id, app_id, federation_id, site_id, artifact_digest, idempotency_key)
-                   VALUES (%s, %s, %s, %s, %s, %s)
+                   (submission_id, app_id, federation_id, site_id, artifact_digest,
+                    idempotency_key, submission_number)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)
                    ON CONFLICT (app_id, federation_id, site_id, idempotency_key) DO NOTHING
-                   RETURNING submission_id, artifact_digest, created_at""",
-                (submission_id, app_id, federation_id, site_id, descriptor["digest"], idempotency_key),
+                   RETURNING submission_id, submission_number, artifact_digest, created_at""",
+                (
+                    submission_id,
+                    app_id,
+                    federation_id,
+                    site_id,
+                    descriptor["digest"],
+                    idempotency_key,
+                    submission_number,
+                ),
             ).fetchone()
             if not submission:
                 existing = conn.execute(
-                    """SELECT submission_id, artifact_digest, created_at FROM submissions
+                    """SELECT submission_id, submission_number, artifact_digest, created_at
+                       FROM submissions
                        WHERE app_id = %s AND federation_id = %s AND site_id = %s
                          AND idempotency_key = %s""",
                     (app_id, federation_id, site_id, idempotency_key),
@@ -927,7 +952,8 @@ class Database:
     ) -> list[dict[str, Any]]:
         with self.connection() as conn:
             return conn.execute(
-                """SELECT s.submission_id, s.site_id, s.artifact_digest, s.status, s.created_at,
+                """SELECT s.submission_id, s.submission_number, s.site_id,
+                          s.artifact_digest, s.status, s.created_at,
                           a.type_name, a.format_version, a.media_type, a.size_bytes, a.metadata,
                           at.purpose
                    FROM submissions s
@@ -948,7 +974,8 @@ class Database:
     ) -> list[dict[str, Any]]:
         with self.connection() as conn:
             return conn.execute(
-                """SELECT s.submission_id, s.site_id, s.artifact_digest, s.status,
+                """SELECT s.submission_id, s.submission_number, s.site_id,
+                          s.artifact_digest, s.status,
                           s.created_at, a.type_name, a.format_version, a.media_type,
                           a.size_bytes, a.metadata, at.purpose
                    FROM submissions s
@@ -1007,9 +1034,13 @@ class Database:
         app_id: str,
         federation_id: str,
         artifact_digests: list[str],
-        target_site_ids: list[str],
+        target_site_ids: list[str] | None,
+        *,
+        generation_job_id: uuid.UUID | None = None,
+        input_submission_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         release_id = uuid.uuid4()
+        input_submission_ids = input_submission_ids or []
         with self.connection() as conn:
             if not conn.execute(
                 """SELECT 1 FROM federations
@@ -1030,30 +1061,62 @@ class Database:
             if {row["digest"] for row in found_artifacts} != set(artifact_digests):
                 raise NotFoundError("one or more release artifacts were not found in this federation")
 
-            params: list[Any] = [app_id, federation_id]
-            target_filter = ""
-            if target_site_ids:
-                target_filter = " AND site_id = ANY(%s)"
-                params.append(target_site_ids)
-            targets = conn.execute(
-                f"""SELECT site_id FROM memberships
-                    WHERE app_id = %s AND federation_id = %s
-                      AND ended_at IS NULL AND can_receive = true{target_filter}
-                    ORDER BY site_id""",
-                params,
-            ).fetchall()
-            target_ids = [row["site_id"] for row in targets]
-            if target_site_ids and set(target_ids) != set(target_site_ids):
-                raise ForbiddenError("every target site must have receive permission")
-            if not target_ids:
-                raise ConflictError("the federation has no receiving sites")
+            if input_submission_ids:
+                inputs = conn.execute(
+                    """SELECT s.submission_id
+                       FROM submissions s
+                       JOIN artifacts a
+                         ON a.app_id = s.app_id AND a.federation_id = s.federation_id
+                        AND a.digest = s.artifact_digest
+                       JOIN artifact_types at
+                         ON at.app_id = a.app_id AND at.type_name = a.type_name
+                        AND at.format_version = a.format_version
+                       WHERE s.app_id = %s AND s.federation_id = %s
+                         AND s.submission_id = ANY(%s::uuid[])
+                         AND s.status = 'accepted' AND at.purpose = 'contribution'""",
+                    (app_id, federation_id, input_submission_ids),
+                ).fetchall()
+                if {str(row["submission_id"]) for row in inputs} != set(input_submission_ids):
+                    raise NotFoundError("one or more release inputs are unavailable")
+
+            target_ids: list[str] = []
+            if target_site_ids is not None:
+                params: list[Any] = [app_id, federation_id]
+                target_filter = ""
+                if target_site_ids:
+                    target_filter = " AND site_id = ANY(%s)"
+                    params.append(target_site_ids)
+                targets = conn.execute(
+                    f"""SELECT site_id FROM memberships
+                        WHERE app_id = %s AND federation_id = %s
+                          AND ended_at IS NULL AND can_receive = true{target_filter}
+                        ORDER BY site_id""",
+                    params,
+                ).fetchall()
+                target_ids = [row["site_id"] for row in targets]
+                if target_site_ids and set(target_ids) != set(target_site_ids):
+                    raise ForbiddenError("every target site must have receive permission")
+                if not target_ids:
+                    raise ConflictError("the federation has no receiving sites")
+
+            conn.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                (f"release\n{app_id}\n{federation_id}",),
+            )
+            release_number = conn.execute(
+                """SELECT coalesce(max(release_number), 0) + 1 AS value
+                   FROM releases WHERE app_id = %s AND federation_id = %s""",
+                (app_id, federation_id),
+            ).fetchone()["value"]
 
             release = conn.execute(
                 """INSERT INTO releases
-                   (release_id, app_id, federation_id, created_by)
-                   VALUES (%s, %s, %s, 'admin')
-                   RETURNING release_id, app_id, federation_id, created_by, created_at""",
-                (release_id, app_id, federation_id),
+                   (release_id, app_id, federation_id, created_by,
+                    release_number, generation_job_id)
+                   VALUES (%s, %s, %s, 'admin', %s, %s)
+                   RETURNING release_id, release_number, app_id, federation_id,
+                             created_by, generation_job_id, created_at""",
+                (release_id, app_id, federation_id, release_number, generation_job_id),
             ).fetchone()
             with conn.cursor() as cursor:
                 cursor.executemany(
@@ -1071,6 +1134,14 @@ class Database:
                         for site_id in target_ids
                     ],
                 )
+                cursor.executemany(
+                    """INSERT INTO release_inputs (release_id, submission_id, ordinal)
+                       VALUES (%s, %s, %s)""",
+                    [
+                        (release_id, submission_id, index)
+                        for index, submission_id in enumerate(input_submission_ids, 1)
+                    ],
+                )
             conn.execute(
                 """INSERT INTO audit_log
                    (actor_type, actor_id, action, app_id, federation_id,
@@ -1081,15 +1152,75 @@ class Database:
                     app_id,
                     federation_id,
                     str(release_id),
-                    Jsonb({"artifact_digests": artifact_digests, "site_ids": target_ids}),
+                    Jsonb({
+                        "release_number": release_number,
+                        "artifact_digests": artifact_digests,
+                        "generation_job_id": str(generation_job_id) if generation_job_id else None,
+                        "submission_ids": input_submission_ids,
+                        "site_ids": target_ids,
+                    }),
                 ),
             )
-            return {**release, "artifact_digests": artifact_digests, "site_ids": target_ids}
+            return {
+                **release,
+                "artifact_digests": artifact_digests,
+                "input_submission_ids": input_submission_ids,
+                "site_ids": target_ids,
+            }
 
-    def next_unreleased_release_artifact(
-        self, app_id: str, federation_id: str
-    ) -> str:
+    def next_unreleased_release(
+        self,
+        app_id: str,
+        federation_id: str,
+        generation_job_id: uuid.UUID | None = None,
+    ) -> dict[str, Any]:
         with self.connection() as conn:
+            job = None
+            if generation_job_id:
+                if conn.execute(
+                    "SELECT 1 FROM releases WHERE generation_job_id = %s",
+                    (generation_job_id,),
+                ).fetchone():
+                    raise ConflictError("the generation job already has a release")
+                job = conn.execute(
+                    """SELECT job_id, payload, result, status
+                       FROM agent_jobs
+                       WHERE job_id = %s AND app_id = %s AND federation_id = %s
+                         AND kind = 'generation.requested'""",
+                    (generation_job_id, app_id, federation_id),
+                ).fetchone()
+                if not job:
+                    raise NotFoundError("generation job not found")
+                if job["status"] != "succeeded":
+                    raise ConflictError("generation job has not succeeded")
+            else:
+                job = conn.execute(
+                    """SELECT j.job_id, j.payload, j.result, j.status
+                       FROM agent_jobs j
+                       WHERE j.app_id = %s AND j.federation_id = %s
+                         AND j.kind = 'generation.requested' AND j.status = 'succeeded'
+                         AND NOT EXISTS (
+                           SELECT 1 FROM releases r WHERE r.generation_job_id = j.job_id
+                         )
+                       ORDER BY j.created_at DESC LIMIT 1""",
+                    (app_id, federation_id),
+                ).fetchone()
+            if job:
+                output_digests = [
+                    digest
+                    for result in (job["result"] or {}).get("intent_results", [])
+                    if result.get("kind") == "run_algorithm" and result.get("status") == "succeeded"
+                    for digest in result.get("output_digests", [])
+                ]
+                if not output_digests:
+                    raise ConflictError("generation job produced no release artifact")
+                return {
+                    "generation_job_id": job["job_id"],
+                    "submission_ids": [str(value) for value in job["payload"].get("submission_ids", [])],
+                    "artifact_digests": output_digests,
+                }
+
+            # Backward-compatible path for release artifacts imported outside an agent job.
             artifact = conn.execute(
                 """SELECT a.digest
                    FROM artifacts a
@@ -1110,39 +1241,75 @@ class Database:
             ).fetchone()
             if not artifact:
                 raise ConflictError("the federation agent has not produced a new result")
-            return artifact["digest"]
+            return {"artifact_digests": [artifact["digest"]], "submission_ids": []}
 
     def list_releases(
         self, app_id: str, federation_id: str, limit: int
     ) -> list[dict[str, Any]]:
         with self.connection() as conn:
             return conn.execute(
-                """SELECT r.release_id, r.created_by, r.created_at,
-                          array_agg(DISTINCT ra.artifact_digest) AS artifact_digests,
-                          max(a.metadata ->> 'round_id') AS version_label,
-                          max(a.metadata ->> 'algorithm_id') AS algorithm_id,
-                          count(DISTINCT d.delivery_id) AS delivery_count,
-                          count(DISTINCT d.delivery_id) FILTER (WHERE d.state = 'pending') AS pending,
-                          count(DISTINCT d.delivery_id) FILTER (WHERE d.state = 'staged') AS staged,
-                          count(DISTINCT d.delivery_id) FILTER (WHERE d.state = 'active') AS active,
-                          count(DISTINCT d.delivery_id) FILTER (WHERE d.state = 'failed') AS failed,
-                          count(DISTINCT d.delivery_id) FILTER (WHERE d.state = 'rolled_back') AS rolled_back,
-                          jsonb_agg(DISTINCT jsonb_build_object(
-                            'delivery_id', d.delivery_id,
-                            'site_id', d.site_id,
-                            'state', d.state,
-                            'failed_action', d.failed_action,
-                            'last_error', d.last_error,
-                            'updated_at', d.updated_at
-                          )) AS deliveries
+                """SELECT r.release_id, r.release_number, r.generation_job_id,
+                          r.created_by, r.created_at,
+                          artifact.artifact_digests, artifact.version_label,
+                          artifact.algorithm_id,
+                          delivery.delivery_count, delivery.pending, delivery.staged,
+                          delivery.active, delivery.failed, delivery.rolled_back,
+                          delivery.deliveries, input.inputs
                    FROM releases r
-                   JOIN release_artifacts ra USING (release_id)
-                   JOIN artifacts a
-                     ON a.app_id = ra.app_id AND a.federation_id = ra.federation_id
-                    AND a.digest = ra.artifact_digest
-                   JOIN deliveries d USING (release_id)
+                   JOIN LATERAL (
+                     SELECT array_agg(ra.artifact_digest ORDER BY ra.artifact_digest) AS artifact_digests,
+                            max(a.metadata ->> 'round_id') AS version_label,
+                            max(a.metadata ->> 'algorithm_id') AS algorithm_id
+                     FROM release_artifacts ra
+                     JOIN artifacts a
+                       ON a.app_id = ra.app_id AND a.federation_id = ra.federation_id
+                      AND a.digest = ra.artifact_digest
+                     WHERE ra.release_id = r.release_id
+                   ) artifact ON true
+                   LEFT JOIN LATERAL (
+                     SELECT count(*) AS delivery_count,
+                            count(*) FILTER (WHERE d.state = 'pending') AS pending,
+                            count(*) FILTER (WHERE d.state = 'staged') AS staged,
+                            count(*) FILTER (WHERE d.state = 'active') AS active,
+                            count(*) FILTER (WHERE d.state = 'failed') AS failed,
+                            count(*) FILTER (WHERE d.state = 'rolled_back') AS rolled_back,
+                            coalesce(jsonb_agg(jsonb_build_object(
+                              'delivery_id', d.delivery_id,
+                              'site_id', d.site_id,
+                              'state', d.state,
+                              'failed_action', d.failed_action,
+                              'last_error', d.last_error,
+                              'targeted_at', d.targeted_at,
+                              'is_current', m.reported_release_id = d.release_id,
+                              'has_used', EXISTS (
+                                SELECT 1 FROM audit_log al
+                                WHERE al.action = 'site.version.reported'
+                                  AND al.app_id = d.app_id
+                                  AND al.federation_id = d.federation_id
+                                  AND al.site_id = d.site_id
+                                  AND al.detail ->> 'reported_release_id' = d.release_id::text
+                              ),
+                              'updated_at', d.updated_at
+                            ) ORDER BY d.targeted_at, d.site_id), '[]'::jsonb) AS deliveries
+                     FROM deliveries d
+                     JOIN memberships m
+                       ON m.app_id = d.app_id AND m.federation_id = d.federation_id
+                      AND m.site_id = d.site_id
+                     WHERE d.release_id = r.release_id AND d.targeted_at IS NOT NULL
+                   ) delivery ON true
+                   LEFT JOIN LATERAL (
+                     SELECT coalesce(jsonb_agg(jsonb_build_object(
+                              'submission_id', s.submission_id,
+                              'submission_number', s.submission_number,
+                              'site_id', s.site_id,
+                              'artifact_digest', s.artifact_digest,
+                              'created_at', s.created_at
+                            ) ORDER BY ri.ordinal), '[]'::jsonb) AS inputs
+                     FROM release_inputs ri
+                     JOIN submissions s USING (submission_id)
+                     WHERE ri.release_id = r.release_id
+                   ) input ON true
                    WHERE r.app_id = %s AND r.federation_id = %s
-                   GROUP BY r.release_id
                    ORDER BY r.created_at DESC
                    LIMIT %s""",
                 (app_id, federation_id, limit),
@@ -1153,7 +1320,8 @@ class Database:
     ) -> dict[str, Any]:
         with self.connection() as conn:
             release = conn.execute(
-                """SELECT release_id, app_id, federation_id, created_by, created_at
+                """SELECT release_id, release_number, generation_job_id,
+                          app_id, federation_id, created_by, created_at
                    FROM releases
                    WHERE app_id = %s AND federation_id = %s AND release_id = %s""",
                 (app_id, federation_id, release_id),
@@ -1171,12 +1339,39 @@ class Database:
                 (release_id,),
             ).fetchall()
             deliveries = conn.execute(
-                """SELECT delivery_id, site_id, state, failed_action, last_error,
-                          updated_at, created_at
-                   FROM deliveries WHERE release_id = %s ORDER BY site_id""",
+                """SELECT d.delivery_id, d.site_id, d.state, d.failed_action,
+                          d.last_error, d.targeted_at, d.updated_at, d.created_at,
+                          m.reported_release_id = d.release_id AS is_current,
+                          EXISTS (
+                            SELECT 1 FROM audit_log al
+                            WHERE al.action = 'site.version.reported'
+                              AND al.app_id = d.app_id
+                              AND al.federation_id = d.federation_id
+                              AND al.site_id = d.site_id
+                              AND al.detail ->> 'reported_release_id' = d.release_id::text
+                          ) AS has_used
+                   FROM deliveries d
+                   JOIN memberships m
+                     ON m.app_id = d.app_id AND m.federation_id = d.federation_id
+                    AND m.site_id = d.site_id
+                   WHERE d.release_id = %s AND d.targeted_at IS NOT NULL
+                   ORDER BY d.targeted_at, d.site_id""",
                 (release_id,),
             ).fetchall()
-            return {**release, "artifacts": artifacts, "deliveries": deliveries}
+            inputs = conn.execute(
+                """SELECT s.submission_id, s.submission_number, s.site_id,
+                          s.artifact_digest, s.created_at
+                   FROM release_inputs ri
+                   JOIN submissions s USING (submission_id)
+                   WHERE ri.release_id = %s ORDER BY ri.ordinal""",
+                (release_id,),
+            ).fetchall()
+            return {
+                **release,
+                "artifacts": artifacts,
+                "inputs": inputs,
+                "deliveries": deliveries,
+            }
 
     def create_delivery_commands(
         self,
@@ -1195,10 +1390,42 @@ class Database:
                 (app_id, federation_id, release_id),
             ).fetchone():
                 raise NotFoundError("release not found")
-            params: list[Any] = [release_id]
-            target_filter = ""
+            if action == "stage":
+                params: list[Any] = [app_id, federation_id]
+                target_filter = ""
+                if site_ids:
+                    target_filter = " AND site_id = ANY(%s)"
+                    params.append(site_ids)
+                eligible = conn.execute(
+                    f"""SELECT site_id FROM memberships
+                        WHERE app_id = %s AND federation_id = %s
+                          AND ended_at IS NULL AND can_receive = true{target_filter}
+                        ORDER BY site_id""",
+                    params,
+                ).fetchall()
+                eligible_ids = [row["site_id"] for row in eligible]
+                if site_ids and set(eligible_ids) != set(site_ids):
+                    raise ForbiddenError("every target site must have receive permission")
+                if not eligible_ids:
+                    raise NotFoundError("no receiving sites found")
+                with conn.cursor() as cursor:
+                    cursor.executemany(
+                        """INSERT INTO deliveries
+                           (delivery_id, release_id, app_id, federation_id, site_id, targeted_at)
+                           VALUES (%s, %s, %s, %s, %s, now())
+                           ON CONFLICT (release_id, site_id) DO UPDATE
+                           SET targeted_at = coalesce(deliveries.targeted_at, EXCLUDED.targeted_at)""",
+                        [
+                            (uuid.uuid4(), release_id, app_id, federation_id, site_id)
+                            for site_id in eligible_ids
+                        ],
+                    )
+                site_ids = eligible_ids
+
+            params = [release_id]
+            target_filter = " AND targeted_at IS NOT NULL"
             if site_ids:
-                target_filter = " AND site_id = ANY(%s)"
+                target_filter += " AND site_id = ANY(%s)"
                 params.append(site_ids)
             deliveries = conn.execute(
                 f"""SELECT delivery_id, site_id, state, failed_action
