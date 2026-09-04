@@ -301,19 +301,17 @@ td small { margin-top: 4px; }
 .delivery-targets input { flex: none; }
 .delivery-targets span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .current-version-list { overflow-x: auto; overscroll-behavior-inline: contain; }
-.current-version-list__head, .current-version-list__row { display: grid; grid-template-columns: minmax(180px, 1.2fr) minmax(170px, .8fr) minmax(170px, .8fr); align-items: center; gap: 24px; min-width: 600px; padding: 0 20px; }
+.current-version-list__head, .current-version-list__row { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(170px, 1fr); align-items: center; gap: 24px; min-width: 420px; padding: 0 20px; }
 .current-version-list__head { min-height: 38px; color: var(--muted); background: var(--surface-2); border-bottom: 1px solid var(--line); font: 9px/1 "Geist Mono Variable", monospace; letter-spacing: .04em; }
 .current-version-list__row { min-height: 58px; border-bottom: 1px solid var(--line); }
 .current-version-list__row:last-child { border-bottom: 0; }
 .current-version-list__row strong { overflow: hidden; font-size: 12px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
-.current-version-list__row time { color: var(--muted); font: 10px/1 "Geist Mono Variable", monospace; }
 .release-code { width: max-content; padding: 5px 7px; color: var(--ink); background: rgba(94, 106, 210, .1); border: 1px solid rgba(123, 134, 235, .24); border-radius: 4px; font: 600 11px/1 "Geist Mono Variable", monospace; letter-spacing: .05em; }
 .version-table__scroll { overflow-x: auto; overscroll-behavior-inline: contain; }
-.version-table table { min-width: 1040px; }
+.version-table table { min-width: 680px; }
 .version-table th:nth-child(1) { width: 130px; }
 .version-table th:nth-child(2) { width: 150px; }
-.version-table th:nth-child(3) { width: 265px; }
-.version-table th:nth-child(4) { width: 180px; }
+.version-table th:nth-child(3) { width: auto; }
 .version-table tbody tr { content-visibility: auto; contain-intrinsic-size: auto 94px; }
 .version-table tbody tr.selected { background: rgba(94, 106, 210, .055); }
 .version-table td { vertical-align: top; }
@@ -323,9 +321,9 @@ td small { margin-top: 4px; }
 .release-select code { width: max-content; padding: 5px 7px; border: 1px solid var(--line-strong); border-radius: 4px; font: 600 11px/1 "Geist Mono Variable", monospace; letter-spacing: .05em; transition: color 150ms ease-out, border-color 150ms ease-out; }
 .release-select small { color: var(--muted); font-size: 9px; }
 .version-table__items { display: grid; gap: 8px; }
-.version-table__items > span, .version-method { display: grid; gap: 3px; }
-.version-table__items strong, .version-method strong { overflow: hidden; color: var(--secondary); font-size: 11px; font-weight: 540; text-overflow: ellipsis; white-space: nowrap; }
-.version-table__items small, .version-method small { color: var(--muted); font: 9px/1.2 "Geist Mono Variable", monospace; }
+.version-table__items > span { display: grid; gap: 3px; }
+.version-table__items strong { overflow: hidden; color: var(--secondary); font-size: 11px; font-weight: 540; text-overflow: ellipsis; white-space: nowrap; }
+.version-table__items small { color: var(--muted); font: 9px/1.2 "Geist Mono Variable", monospace; }
 .version-table__items em { color: var(--muted); font-size: 10px; font-style: normal; }
 
 .dialog { width: min(680px, calc(100vw - 28px)); max-height: calc(100dvh - 40px); padding: 0; overflow: auto; overscroll-behavior: contain; color: var(--ink); background: var(--surface-1); border: 1px solid var(--line-strong); border-radius: var(--radius-md); box-shadow: 0 24px 80px rgba(0, 0, 0, .55); }

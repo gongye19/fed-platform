@@ -566,10 +566,10 @@ function deliveryLabel(delivery: Delivery) {
 }
 
 function CurrentSiteVersions({ memberships }: { memberships: Membership[] }) {
-  return <section className="version-panel current-versions"><div className="section-head"><div><p className="eyebrow">站点状态</p><h2>当前采用的联邦版本</h2></div><span>{memberships.length} 个站点</span></div>
+  return <section className="version-panel current-versions"><div className="section-head"><div><p className="eyebrow">按站点</p><h2>当前使用的联邦版本</h2></div><span>{memberships.length} 个站点</span></div>
     {memberships.length === 0 ? <Empty>还没有站点接入这个应用。</Empty> : <div className="current-version-list">
-      <div className="current-version-list__head"><span>站点</span><span>当前联邦版本</span><span>最近确认</span></div>
-      {memberships.map((member) => <div className="current-version-list__row" key={member.site_id}><strong>{visibleName(member.display_name)}</strong><span>{member.reported_release_id ? <code className="release-code" title={member.reported_release_id} translate="no">{releaseCode(member.reported_release_id)}</code> : <Status value="尚未采用" />}</span><time>{formatTime(member.federation_version_reported_at, "尚未确认")}</time></div>)}
+      <div className="current-version-list__head"><span>站点</span><span>当前联邦版本</span></div>
+      {memberships.map((member) => <div className="current-version-list__row" key={member.site_id}><strong>{visibleName(member.display_name)}</strong><span>{member.reported_release_id ? <code className="release-code" title={member.reported_release_id} translate="no">{releaseCode(member.reported_release_id)}</code> : <Status value="尚未采用" />}</span></div>)}
     </div>}
   </section>;
 }
@@ -582,13 +582,11 @@ function FederationVersionTable({ releases, memberships, selectedId, onSelect }:
 }) {
   const labels = releaseLabels(releases);
   const siteNames = new Map(memberships.map((member) => [member.site_id, visibleName(member.display_name)]));
-  return <section className="version-panel version-table"><div className="section-head"><div><p className="eyebrow">版本记录</p><h2>所有联邦版本</h2></div><span>{releases.length} 个版本</span></div>
-    <div className="version-table__scroll"><table><thead><tr><th>版本编号</th><th>生成时间</th><th>使用的站点数据</th><th>生成方式</th><th>下发与采用</th></tr></thead><tbody>{releases.map((release) => <tr className={release.release_id === selectedId ? "selected" : ""} key={release.release_id}>
+  return <section className="version-panel version-table"><div className="section-head"><div><p className="eyebrow">按联邦版本</p><h2>版本来源</h2></div><span>{releases.length} 个版本</span></div>
+    <div className="version-table__scroll"><table><thead><tr><th>版本编号</th><th>生成时间</th><th>使用的站点数据</th></tr></thead><tbody>{releases.map((release) => <tr className={release.release_id === selectedId ? "selected" : ""} key={release.release_id}>
       <td><button type="button" className="release-select" aria-pressed={release.release_id === selectedId} title={release.release_id} onClick={() => onSelect(release.release_id)}><code translate="no">{labels.get(release.release_id)}</code><small>{release.release_id === selectedId ? "已选择" : "选择"}</small></button></td>
       <td><time>{formatTime(release.created_at)}</time></td>
       <td><div className="version-table__items">{release.inputs?.length > 0 ? release.inputs.map((input) => <span key={input.submission_id}><strong>{siteNames.get(input.site_id) || input.site_id}</strong><small>{batchLabel(input.submission_number)}</small></span>) : <em>历史输入未关联</em>}</div></td>
-      <td><span className="version-method"><strong>{release.algorithm_id ? "应用联邦算法" : "平台导入"}</strong>{release.algorithm_id && <small>由联邦 Agent 执行</small>}</span></td>
-      <td><div className="version-table__items">{release.deliveries?.length > 0 ? release.deliveries.map((delivery) => <span key={delivery.delivery_id}><strong>{siteNames.get(delivery.site_id) || delivery.site_id}</strong><small>{deliveryLabel(delivery)}</small></span>) : <em>尚未下发</em>}</div></td>
     </tr>)}</tbody></table></div>
     {releases.length === 0 && <Empty>还没有生成联邦版本。</Empty>}
   </section>;
