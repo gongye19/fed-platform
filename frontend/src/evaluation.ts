@@ -78,3 +78,19 @@ export function buildEvaluationTrend(rows: EvaluationRow[]): EvaluationTrend {
     valuesBySite,
   };
 }
+
+export function compareWithPreviousVersion(rows: EvaluationRow[]) {
+  const trend = buildEvaluationTrend(rows);
+  const comparisons = new Map<string, { before: number | null; after: number | null }>();
+  trend.siteIds.forEach((siteId) => {
+    let current = trend.valuesBySite[siteId][0];
+    trend.rounds.forEach(({ roundId }, index) => {
+      const row = rows.find((item) => item.siteId === siteId && item.roundId === roundId);
+      if (!row) return;
+      const candidate = trend.valuesBySite[siteId][index + 1];
+      comparisons.set(row.key, { before: current, after: candidate });
+      if (candidate !== null) current = candidate;
+    });
+  });
+  return comparisons;
+}

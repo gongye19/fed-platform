@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildEvaluationTrend, groupEvaluationResults, latestEvaluationRows } from "../src/evaluation.ts";
+import { buildEvaluationTrend, compareWithPreviousVersion, groupEvaluationResults, latestEvaluationRows } from "../src/evaluation.ts";
 
 test("combines baseline and candidate reports per round and site", () => {
   const rows = groupEvaluationResults([
@@ -37,4 +37,18 @@ test("builds site trends in chronological round order", () => {
 
   assert.deepEqual(trend.rounds.map((round) => round.roundId), ["round-1", "round-2"]);
   assert.deepEqual(trend.valuesBySite, { "site-a": [0.6, 0.8, 0.9], "site-b": [0.7, 0.7, 0.85] });
+});
+
+test("compares each result with the site's previous federation version", () => {
+  const rows = groupEvaluationResults([
+    { site_id: "site-a", created_at: "2026-01-03T00:00:00Z", metadata: { round_id: "round-3", baseline_accuracy: 0.65, candidate_accuracy: 0.85 } },
+    { site_id: "site-a", created_at: "2026-01-01T00:00:00Z", metadata: { round_id: "round-1", baseline_accuracy: 0.6, candidate_accuracy: 0.85 } },
+    { site_id: "site-a", created_at: "2026-01-02T00:00:00Z", metadata: { round_id: "round-2", baseline_accuracy: 0.7, candidate_accuracy: 0.8 } },
+  ]);
+
+  assert.deepEqual(Array.from(compareWithPreviousVersion(rows)), [
+    ["round-1:site-a", { before: 0.6, after: 0.85 }],
+    ["round-2:site-a", { before: 0.85, after: 0.8 }],
+    ["round-3:site-a", { before: 0.8, after: 0.85 }],
+  ]);
 });
