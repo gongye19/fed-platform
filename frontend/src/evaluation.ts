@@ -22,8 +22,27 @@ export type EvaluationTrend = {
 
 export type SiteTrackNode = {
   kind: "contribution" | "distribute" | "update" | "evaluation";
-  complete: boolean;
+  state:
+    | "included" | "available" | "missing"
+    | "not_selected" | "queued" | "received" | "failed"
+    | "using" | "used" | "kept_previous" | "rolled_back" | "unknown" | "not_applicable"
+    | "returned" | "waiting";
   releaseId: string;
+};
+
+export type TrackSubmission = {
+  submission_id: string;
+  site_id: string;
+  purpose: string;
+  created_at: string;
+  metadata: Record<string, unknown>;
+};
+
+export type TrackRelease = {
+  release_id: string;
+  created_at: string;
+  version_label?: string | null;
+  deliveries?: Array<{ site_id: string; state: string }>;
 };
 
 export function groupEvaluationResults(items: EvaluationInput[]) {
@@ -96,41 +115,92 @@ type ActivityInput = {
 export function buildSiteTracks(
   siteIds: string[],
   activities: ActivityInput[],
-  releases: Array<{ release_id: string; created_at: string; version_label?: string | null }>,
-  currentReleases: Record<string, string | null>,
+  releases: TrackRelease[],
+  currentReports: Record<string, { releaseId: string | null; reportedAt: string | null }>,
+  submissions: TrackSubmission[],
 ) {
   const ordered = releases.slice().sort((left, right) => left.created_at.localeCompare(right.created_at));
-  const inWindow = (activity: ActivityInput, after: string | null, before: string | null) => (
-    (!after || activity.created_at > after) && (!before || activity.created_at < before)
-  );
+  const releaseIndex = new Map(ordered.map((release, index) => [release.release_id, index]));
   const metadataValue = (activity: ActivityInput, key: string) => {
     const metadata = activity.detail?.artifact_metadata;
     return metadata && typeof metadata === "object" ? (metadata as Record<string, unknown>)[key] : undefined;
   };
+  const reportedRelease = (activity: ActivityInput) => {
+    const reported = activity.detail?.reported_release_id;
+    return typeof reported === "string" ? reported : activity.target_id === "none" ? null : activity.target_id;
+  };
+  const submissionSites = new Map(submissions.map((submission) => [submission.submission_id, submission.site_id]));
+  for (const activity of activities) {
+    if (activity.action === "submission.accepted" && activity.site_id) submissionSites.set(activity.target_id, activity.site_id);
+  }
 
   return siteIds.map((siteId) => {
     if (ordered.length === 0) return { siteId, nodes: [] as SiteTrackNode[] };
     const siteActivity = activities.filter((activity) => activity.site_id === siteId);
     const nodes: SiteTrackNode[] = [];
 
-    for (const release of ordered) {
-      const index = ordered.findIndex((item) => item.release_id === release.release_id);
-      const previousAt = ordered[index - 1]?.created_at || null;
-      const nextAt = ordered[index + 1]?.created_at || null;
-      const distribution = activities.some((activity) => activity.action === "release.stage.requested" && activity.target_id === release.release_id && Array.isArray(activity.detail?.site_ids) && activity.detail.site_ids.includes(siteId));
-      const reports = siteActivity
-        .filter((activity) => activity.action === "site.version.reported" && inWindow(activity, release.created_at, nextAt))
-        .sort((left, right) => right.created_at.localeCompare(left.created_at));
-      const reportedRelease = reports.length === 0
-        ? (nextAt ? null : currentReleases[siteId])
-        : typeof reports[0].detail?.reported_release_id === "string" ? reports[0].detail.reported_release_id : reports[0].target_id === "none" ? null : reports[0].target_id;
+    ordered.forEach((release, index) => {
+      const previousAt = ordered[index - 1]?.created_at || "";
+      const generation = activities
+        .filter((activity) => activity.action === "generation.requested"
+          && activity.detail?.round_id === release.version_label
+          && activity.created_at <= release.created_at)
+        .sort((left, right) => left.created_at.localeCompare(right.created_at)).at(-1);
+      const selectedInputs = new Set(Array.isArray(generation?.detail?.submission_ids)
+        ? generation.detail.submission_ids.filter((value): value is string => typeof value === "string")
+        : []);
+      const included = selectedInputs.size > 0
+        ? Array.from(selectedInputs).some((id) => submissionSites.get(id) === siteId)
+        : submissions.some((submission) => submission.site_id === siteId
+          && submission.purpose === "contribution"
+          && submission.metadata.round_id === release.version_label);
+      const available = submissions.some((submission) => submission.site_id === siteId
+        && submission.purpose === "contribution"
+        && submission.created_at > previousAt
+        && submission.created_at <= release.created_at);
+
+      const delivery = release.deliveries?.find((item) => item.site_id === siteId);
+      const requested = activities.some((activity) => activity.action === "release.stage.requested"
+        && activity.target_id === release.release_id
+        && Array.isArray(activity.detail?.site_ids)
+        && activity.detail.site_ids.includes(siteId));
+      const selectedForDistribution = requested || Boolean(delivery && delivery.state !== "pending");
+      const distributionState: SiteTrackNode["state"] = !selectedForDistribution
+        ? "not_selected"
+        : delivery?.state === "failed"
+          ? "failed"
+          : !delivery || delivery.state === "pending"
+            ? "queued"
+            : "received";
+
+      const versionReports = siteActivity
+        .filter((activity) => activity.action === "site.version.reported" && activity.created_at >= release.created_at)
+        .sort((left, right) => left.created_at.localeCompare(right.created_at));
+      const adopted = versionReports.find((activity) => reportedRelease(activity) === release.release_id);
+      const rolledBack = adopted && versionReports.some((activity) => {
+        if (activity.created_at <= adopted.created_at) return false;
+        const next = reportedRelease(activity);
+        return next === null || (releaseIndex.get(next) ?? Number.POSITIVE_INFINITY) < index;
+      });
+      const current = currentReports[siteId];
+      let adoptionState: SiteTrackNode["state"] = "not_applicable";
+      if (selectedForDistribution && distributionState !== "failed") {
+        if (rolledBack) adoptionState = "rolled_back";
+        else if (current?.releaseId === release.release_id) adoptionState = "using";
+        else if (adopted) adoptionState = "used";
+        else if (current?.reportedAt && current.reportedAt >= release.created_at) adoptionState = "kept_previous";
+        else adoptionState = "unknown";
+      }
+
+      const returned = siteActivity.some((activity) => activity.action === "evaluation.received"
+        && metadataValue(activity, "candidate_release_id") === release.release_id);
       nodes.push(
-        { kind: "contribution", complete: siteActivity.some((activity) => activity.action === "submission.accepted" && (release.version_label ? metadataValue(activity, "round_id") === release.version_label : inWindow(activity, previousAt, release.created_at))), releaseId: release.release_id },
-        { kind: "distribute", complete: distribution, releaseId: release.release_id },
-        { kind: "update", complete: reportedRelease === release.release_id, releaseId: release.release_id },
-        { kind: "evaluation", complete: siteActivity.some((activity) => activity.action === "evaluation.received" && metadataValue(activity, "candidate_release_id") === release.release_id), releaseId: release.release_id },
+        { kind: "contribution", state: included ? "included" : available ? "available" : "missing", releaseId: release.release_id },
+        { kind: "distribute", state: distributionState, releaseId: release.release_id },
+        { kind: "update", state: adoptionState, releaseId: release.release_id },
+        { kind: "evaluation", state: returned ? "returned" : selectedForDistribution && distributionState !== "failed" ? "waiting" : "not_applicable", releaseId: release.release_id },
       );
-    }
+    });
     return { siteId, nodes };
   });
 }

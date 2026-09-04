@@ -1126,7 +1126,15 @@ class Database:
                           count(DISTINCT d.delivery_id) FILTER (WHERE d.state = 'staged') AS staged,
                           count(DISTINCT d.delivery_id) FILTER (WHERE d.state = 'active') AS active,
                           count(DISTINCT d.delivery_id) FILTER (WHERE d.state = 'failed') AS failed,
-                          count(DISTINCT d.delivery_id) FILTER (WHERE d.state = 'rolled_back') AS rolled_back
+                          count(DISTINCT d.delivery_id) FILTER (WHERE d.state = 'rolled_back') AS rolled_back,
+                          jsonb_agg(DISTINCT jsonb_build_object(
+                            'delivery_id', d.delivery_id,
+                            'site_id', d.site_id,
+                            'state', d.state,
+                            'failed_action', d.failed_action,
+                            'last_error', d.last_error,
+                            'updated_at', d.updated_at
+                          )) AS deliveries
                    FROM releases r
                    JOIN release_artifacts ra USING (release_id)
                    JOIN artifacts a
