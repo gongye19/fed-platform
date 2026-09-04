@@ -457,7 +457,7 @@ function chartPath(values: Array<number | null>, x: (index: number) => number, y
 function EffectChart({ rows, siteNames }: { rows: EvaluationRow[]; siteNames: Record<string, string> }) {
   const trend = buildEvaluationTrend(rows);
   const labels = ["联邦前", ...trend.rounds.map((_, index) => `第 ${index + 1} 轮`)];
-  const width = Math.max(760, labels.length * 145);
+  const width = Math.max(760, Math.min(1080, labels.length * 120));
   const height = 320;
   const bounds = { top: 22, right: 24, bottom: 48, left: 52 };
   const plotWidth = width - bounds.left - bounds.right;
@@ -469,9 +469,9 @@ function EffectChart({ rows, siteNames }: { rows: EvaluationRow[]; siteNames: Re
   return <section className="effect-panel"><div className="section-head"><div><p className="eyebrow">各站点与总体</p><h2>效果趋势</h2></div><span>总体按样本数加权</span></div>
     {rows.length === 0 ? <Empty>还没有站点上传效果结果。</Empty> : <>
       <div className="effect-legend"><span><i className="effect-legend__line effect-legend__line--total" />总体</span>{siteSeries.map((series) => <span key={series.siteId}><i className="effect-legend__line" style={{ background: series.color }} />{siteNames[series.siteId] || series.siteId}</span>)}</div>
-      <div className="effect-chart__scroll"><svg className="effect-chart" viewBox={`0 0 ${width} ${height}`} style={{ minWidth: width }} role="img" aria-label="各站点与总体效果随联邦轮次的变化折线图">
+      <div className="effect-chart__scroll"><svg className="effect-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="各站点与总体效果随联邦轮次的变化折线图">
         {[0, .25, .5, .75, 1].map((tick) => <g key={tick}><line className="effect-chart__grid" x1={bounds.left} y1={y(tick)} x2={width - bounds.right} y2={y(tick)} /><text className="effect-chart__axis" x={bounds.left - 10} y={y(tick) + 4} textAnchor="end">{tick * 100}%</text></g>)}
-        {labels.map((label, index) => <text className="effect-chart__axis" key={label} x={x(index)} y={height - 16} textAnchor="middle"><title>{index === 0 ? label : trend.rounds[index - 1].roundId}</title>{label}</text>)}
+        {labels.map((label, index) => labels.length <= 10 || index === labels.length - 1 || index % Math.ceil(labels.length / 8) === 0 ? <text className="effect-chart__axis" key={label} x={x(index)} y={height - 16} textAnchor="middle"><title>{index === 0 ? label : trend.rounds[index - 1].roundId}</title>{label}</text> : null)}
         {siteSeries.map((series) => <g key={series.siteId}><path className="effect-chart__site-line" d={chartPath(series.values, x, y)} stroke={series.color} />{series.values.map((value, index) => value === null ? null : <circle key={index} className="effect-chart__point" cx={x(index)} cy={y(value)} r="3.5" fill={series.color}><title>{`${siteNames[series.siteId] || series.siteId} · ${labels[index]} · ${(value * 100).toFixed(1)}%`}</title></circle>)}</g>)}
         <path className="effect-chart__total-line" d={chartPath(trend.totals, x, y)} />
         {trend.totals.map((value, index) => value === null ? null : <circle key={index} className="effect-chart__total-point" cx={x(index)} cy={y(value)} r="4.5"><title>{`总体 · ${labels[index]} · ${(value * 100).toFixed(1)}%`}</title></circle>)}
