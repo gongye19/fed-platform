@@ -1,16 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { contributionBatchNumbers, latestReleaseGroup, releaseCode, releaseLabels } from "../src/versions.ts";
+import { contributionBatchNumbers, dataCodes, federationCodes, latestReleaseGroup, latestReleaseInstances, siteCodes } from "../src/versions.ts";
 
-test("uses stable opaque release codes without sequence semantics", () => {
-  assert.equal(releaseCode("b9d463cb-b9c1-42e2-8898-6c7fbea5cc5e"), "B9D463CB");
-  assert.deepEqual(Array.from(releaseLabels([
-    { release_id: "b9d463cb-b9c1-42e2-8898-6c7fbea5cc5e" },
-    { release_id: "8c987757-0e98-49db-a015-67ee18b0555a" },
-  ])), [
-    ["b9d463cb-b9c1-42e2-8898-6c7fbea5cc5e", "B9D463CB"],
-    ["8c987757-0e98-49db-a015-67ee18b0555a", "8C987757"],
-  ]);
+test("builds app-scoped site, data, and federation codes", () => {
+  const sites = [{ site_id: "site-c" }, { site_id: "site-a" }, { site_id: "site-b" }];
+  const submissions = [
+    { submission_id: "a-1", site_id: "site-a", purpose: "contribution", created_at: "2026-01-01T00:00:00Z" },
+    { submission_id: "b-eval", site_id: "site-b", purpose: "evaluation", created_at: "2026-01-01T00:01:00Z" },
+    { submission_id: "b-1", site_id: "site-b", purpose: "contribution", created_at: "2026-01-01T00:02:00Z" },
+    { submission_id: "c-1", site_id: "site-c", purpose: "contribution", created_at: "2026-01-01T00:03:00Z" },
+  ];
+  const data = dataCodes(submissions, sites);
+  const releases = [{ release_id: "internal-uuid", inputs: [{ submission_id: "c-1" }, { submission_id: "a-1" }, { submission_id: "b-1" }] }];
+
+  assert.deepEqual(Array.from(siteCodes(sites)), [["site-a", "S-01"], ["site-b", "S-02"], ["site-c", "S-03"]]);
+  assert.deepEqual(Array.from(data), [["a-1", "D-01001"], ["b-1", "D-02001"], ["c-1", "D-03001"]]);
+  assert.equal(federationCodes(releases, data).get("internal-uuid"), "F-01001-02001-03001");
 });
 
 test("keeps only the latest federation experiment releases", () => {
@@ -35,4 +40,14 @@ test("numbers contribution batches per site without counting evaluation uploads"
   ]);
 
   assert.deepEqual(Array.from(numbers), [["a-1", 1], ["b-1", 1], ["a-2", 2]]);
+});
+
+test("keeps the newest release when the same inputs are generated again", () => {
+  const releases = [
+    { release_id: "new", created_at: "2026-01-02T00:00:00Z", inputs: [{ submission_id: "a" }, { submission_id: "b" }] },
+    { release_id: "other", created_at: "2026-01-03T00:00:00Z", inputs: [{ submission_id: "c" }] },
+    { release_id: "old", created_at: "2026-01-01T00:00:00Z", inputs: [{ submission_id: "b" }, { submission_id: "a" }] },
+  ];
+
+  assert.deepEqual(latestReleaseInstances(releases).map((release) => release.release_id), ["new", "other"]);
 });
