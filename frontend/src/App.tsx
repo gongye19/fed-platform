@@ -4,6 +4,7 @@ import { buildEvaluationTrend, buildSiteTracks, groupEvaluationResults, latestEv
 import { latestReleaseGroup, releaseLabels, siteContributionRows } from "./versions";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
+const percentFormatter = new Intl.NumberFormat("zh-CN", { style: "percent", maximumFractionDigits: 1 });
 
 type Json = Record<string, unknown>;
 type Application = {
@@ -200,7 +201,8 @@ function Status({ value }: { value: string }) {
     : ["pending", "running", "staged", "retry", "等待", "尚未连接", "待分发", "已暂存", "未提交", "尚未提交", "等待新数据", "尚未上报"].includes(value)
       ? "waiting"
       : "ok";
-  return <span className={`status status--${tone}`}><span aria-hidden="true" />{value}</span>;
+  const label = ({ active: "运行中", disabled: "已停用", failed: "失败", idle: "空闲", offline: "离线", online: "在线", pending: "等待", retry: "重试中", running: "处理中", staged: "已暂存" } as Record<string, string>)[value] || value;
+  return <span className={`status status--${tone}`}><span aria-hidden="true" />{label}</span>;
 }
 
 function ErrorMessage({ error }: { error: string }) {
@@ -247,11 +249,12 @@ function Shell({ path, navigate }: {
   }, []);
   return (
     <div className="shell">
+      <a className="skip-link" href="#main-content">跳到主要内容</a>
       <aside className="sidebar">
-        <button className="brand" onClick={() => navigate("/")}><strong>FED</strong><span>联邦控制面</span></button>
+        <a className="brand" href="/"><strong>FED</strong><span>联邦控制面</span></a>
         <p className="sidebar__label">联邦工作区</p>
         <nav aria-label="主导航">
-          <button className={path === "/" ? "active" : ""} onClick={() => navigate("/")} aria-current={path === "/" ? "page" : undefined}>概览</button>
+          <a className={path === "/" ? "active" : ""} href="/" aria-current={path === "/" ? "page" : undefined}>概览</a>
           <button
             className={path.startsWith("/apps") ? "active sidebar__apps-toggle" : "sidebar__apps-toggle"}
             onClick={() => {
@@ -267,25 +270,25 @@ function Shell({ path, navigate }: {
               const selected = item.app_id === selectedAppId;
               const base = `/apps/${encodeURIComponent(item.app_id)}`;
               return <div className="sidebar-app" key={item.app_id}>
-                <button className={selected ? "sidebar-app__name active" : "sidebar-app__name"} onClick={() => navigate(`${base}/overview`)}>
+                <a className={selected ? "sidebar-app__name active" : "sidebar-app__name"} href={`${base}/overview`}>
                   <span>{visibleName(item.display_name)}</span><small>{item.current_version}</small>
-                </button>
+                </a>
               </div>;
             })}
           </div>}
         </nav>
         <div className="sidebar__foot">
-          <span className="connection"><i />API 已连接</span>
+          <span className="connection"><i aria-hidden="true" />API 已连接</span>
           <span className="environment">开发环境</span>
         </div>
       </aside>
-      <main className="content">
+      <main className="content" id="main-content" tabIndex={-1}>
         {path === "/" ? (
           <PlatformOverview />
         ) : appMatch ? (
-          <ApplicationDetail appId={selectedAppId} section={selectedSection} navigate={navigate} />
+          <ApplicationDetail key={selectedAppId} appId={selectedAppId} section={selectedSection} />
         ) : path === "/apps" ? (
-          <ApplicationsPage navigate={navigate} />
+          <ApplicationsPage />
         ) : (
           <PlatformOverview />
         )}
@@ -303,7 +306,16 @@ function PageHeader({ eyebrow, title, meta, action }: { eyebrow: string; title: 
   );
 }
 
-function ApplicationsPage({ navigate }: { navigate: (path: string) => void }) {
+function ApplicationLoading() {
+  return <section className="app-loading" role="status" aria-live="polite" aria-busy="true">
+    <span className="sr-only">正在加载应用…</span>
+    <div className="app-loading__header" aria-hidden="true"><span /><strong /><i /></div>
+    <div className="app-loading__tabs" aria-hidden="true" />
+    <div className="app-loading__panel" aria-hidden="true" />
+  </section>;
+}
+
+function ApplicationsPage() {
   const [items, setItems] = useState<Application[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -325,20 +337,20 @@ function ApplicationsPage({ navigate }: { navigate: (path: string) => void }) {
   const visible = items.filter((item) => `${item.app_id} ${item.display_name}`.toLowerCase().includes(query.toLowerCase()));
   return (
     <>
-      <PageHeader eyebrow="Registry / Applications" title="应用" meta={`${items.length} 个已注册应用`} action={<button className="button button--primary" onClick={() => setRegistering(true)}>注册应用</button>} />
+      <PageHeader eyebrow="应用管理" title="应用" meta={`${items.length} 个已注册应用`} action={<button className="button button--primary" onClick={() => setRegistering(true)}>注册应用</button>} />
       <div className="toolbar">
-        <label className="search"><span className="sr-only">搜索应用</span><input type="search" placeholder="搜索应用名称" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
+        <label className="search"><span className="sr-only">搜索应用</span><input type="search" name="application-search" autoComplete="off" placeholder="搜索应用名称…" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
         <button className="button button--quiet" onClick={load}>刷新</button>
       </div>
       {error && <ErrorMessage error={error} />}
       <section className="ledger" aria-busy={loading}>
-        <div className="ledger__head"><span>APPLICATION</span><span>SITES</span><span>STATE</span></div>
+        <div className="ledger__head"><span>应用</span><span>站点</span><span>状态</span></div>
         {!loading && visible.length === 0 ? <Empty>没有匹配的应用。</Empty> : visible.map((item) => (
-          <button className="ledger__row" key={item.app_id} onClick={() => navigate(`/apps/${encodeURIComponent(item.app_id)}/overview`)}>
+          <a className="ledger__row" key={item.app_id} href={`/apps/${encodeURIComponent(item.app_id)}/overview`}>
             <span><strong>{visibleName(item.display_name)}</strong><small>应用版本 {item.current_version}</small></span>
             <span className="ledger__number">{item.site_count}</span>
             <span><Status value={item.status} /></span>
-          </button>
+          </a>
         ))}
       </section>
       {registering && <RegisterApplication onClose={() => setRegistering(false)} onCreated={async () => { setRegistering(false); await load(); }} />}
@@ -359,20 +371,24 @@ const sampleManifest = JSON.stringify({
 function RegisterApplication({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [manifest, setManifest] = useState(sampleManifest);
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   async function submit(event: FormEvent) {
     event.preventDefault();
+    setSubmitting(true);
+    setError("");
     try {
       const body = JSON.parse(manifest);
       await api("/admin/v1/apps", { method: "POST", body: JSON.stringify(body) });
       onCreated();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Manifest 无效");
+      setSubmitting(false);
     }
   }
-  return <Modal title="注册应用契约" onClose={onClose}><form onSubmit={submit} className="stack"><p className="hint">提交完整 FedApp Manifest。相同版本注册后不可改变语义。</p><label>Manifest JSON<textarea className="code-field" value={manifest} onChange={(event) => setManifest(event.target.value)} rows={18} spellCheck={false} /></label>{error && <ErrorMessage error={error} />}<div className="dialog__actions"><button type="button" className="button button--quiet" onClick={onClose}>取消</button><button className="button button--primary">注册应用</button></div></form></Modal>;
+  return <Modal title="注册应用契约" onClose={onClose}><form onSubmit={submit} className="stack" aria-busy={submitting}><p className="hint">提交完整 FedApp Manifest。相同版本注册后不可改变语义。</p><label>Manifest JSON<textarea className="code-field" name="manifest" autoComplete="off" value={manifest} onChange={(event) => setManifest(event.target.value)} rows={18} spellCheck={false} /></label>{error && <ErrorMessage error={error} />}<div className="dialog__actions"><button type="button" className="button button--quiet" onClick={onClose}>取消</button><button className="button button--primary" disabled={submitting}>{submitting ? "注册中…" : "注册应用"}</button></div></form></Modal>;
 }
 
-function ApplicationDetail({ appId, section, navigate }: { appId: string; section: AppSection; navigate: (path: string) => void }) {
+function ApplicationDetail({ appId, section }: { appId: string; section: AppSection }) {
   const [topology, setTopology] = useState<Topology | null>(null);
   const [federationId, setFederationId] = useState("");
   const [evaluations, setEvaluations] = useState<Submission[]>([]);
@@ -382,12 +398,13 @@ function ApplicationDetail({ appId, section, navigate }: { appId: string; sectio
   const [error, setError] = useState("");
 
   const loadTopology = async () => {
+    setError("");
     try {
       const nextTopology = await api<Topology>(`/admin/v1/apps/${encodeURIComponent(appId)}/topology`);
       setTopology(nextTopology);
       setFederationId((current) => nextTopology.federations.some((item) => item.federation_id === current) ? current : nextTopology.federations[0]?.federation_id || "");
       setError("");
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "应用加载失败"); }
+    } catch { setError("暂时无法加载这个应用，请检查网络连接后重试。"); }
   };
   const loadChannel = async () => {
     if (!federationId) { setEvaluations([]); setSubmissions([]); setReleases([]); return; }
@@ -412,7 +429,7 @@ function ApplicationDetail({ appId, section, navigate }: { appId: string; sectio
       .catch((reason) => setError(reason instanceof Error ? reason.message : "活动加载失败"));
   }, [appId]);
 
-  if (!topology) return <><PageHeader eyebrow="Registry / Application" title={appId} meta="正在加载应用拓扑…" />{error && <ErrorMessage error={error} />}</>;
+  if (!topology) return error ? <><PageHeader eyebrow="应用" title="无法打开应用" action={<button className="button" onClick={loadTopology}>重新加载</button>} /><ErrorMessage error={error} /></> : <ApplicationLoading />;
   const app = topology.application;
   const sectionLabel = APP_SECTIONS.find(([id]) => id === section)?.[1] || "概览";
   const base = `/apps/${encodeURIComponent(appId)}`;
@@ -422,7 +439,7 @@ function ApplicationDetail({ appId, section, navigate }: { appId: string; sectio
     <PageHeader eyebrow={`应用 / ${sectionLabel}`} title={visibleName(app.display_name)} meta={`应用版本 ${app.current_version}`} />
     <div className="app-state"><Status value={app.status} /></div>
     {error && <ErrorMessage error={error} />}
-    <nav className="app-nav" aria-label={`${visibleName(app.display_name)} 导航`}>{APP_SECTIONS.map(([id, label]) => <button key={id} className={section === id ? "active" : ""} aria-current={section === id ? "page" : undefined} onClick={() => navigate(`${base}/${id}`)}>{label}</button>)}</nav>
+    <nav className="app-nav" aria-label={`${visibleName(app.display_name)} 导航`}>{APP_SECTIONS.map(([id, label]) => <a key={id} href={`${base}/${id}`} className={section === id ? "active" : ""} aria-current={section === id ? "page" : undefined}>{label}</a>)}</nav>
     {section === "overview" && <div className="panel-stack"><ApplicationSites topology={topology} releases={currentFederationReleases} /></div>}
     {section === "evaluations" && <Evaluations items={evaluations} memberships={topology.memberships} />}
     {section === "versions" && <VersionManagement appId={appId} federationId={federationId} topology={topology} submissions={submissions} releases={currentFederationReleases} activities={currentFederationActivities} onRefresh={async () => { await Promise.all([loadTopology(), loadChannel()]); }} />}
@@ -450,7 +467,7 @@ function visibleActivityTarget(item: Activity, labels: Map<string, string>) {
 function ActivityTimeline({ items, memberships, releases }: { items: Activity[]; memberships: Membership[]; releases: ReleaseSummary[] }) {
   const names = activityNames(memberships, releases);
   const milestones = items.filter((item) => item.source === "event" || item.action.startsWith("release.")).slice(0, 50);
-  return <section className="activity-panel"><div className="section-head"><div><p className="eyebrow">联邦过程</p><h2>时间线</h2></div><span>最近 {milestones.length} 个节点</span></div><div className="timeline">{milestones.map((item, index) => <article key={`${item.created_at}-${index}`} className="timeline__item"><time>{formatTime(item.created_at)}</time><span className="timeline__node" /><div><div className="timeline__title"><strong>{activityLabel(item.action)}</strong><Status value={resultLabel(item.result)} /></div><p>{item.site_id ? names.sites.get(item.site_id) || "站点" : "平台"}</p><small>{visibleActivityTarget(item, names.releases)}</small></div></article>)}{milestones.length === 0 && <Empty>这个应用还没有联邦活动。</Empty>}</div></section>;
+  return <section className="activity-panel"><div className="section-head"><div><p className="eyebrow">联邦过程</p><h2>时间线</h2></div><span>最近 {milestones.length} 个节点</span></div><div className="timeline">{milestones.map((item, index) => <article key={`${item.created_at}-${index}`} className="timeline__item"><time>{formatTime(item.created_at)}</time><span className="timeline__node" aria-hidden="true" /><div><div className="timeline__title"><strong>{activityLabel(item.action)}</strong><Status value={resultLabel(item.result)} /></div><p>{item.site_id ? names.sites.get(item.site_id) || "站点" : "平台"}</p><small>{visibleActivityTarget(item, names.releases)}</small></div></article>)}{milestones.length === 0 && <Empty>这个应用还没有联邦活动。</Empty>}</div></section>;
 }
 
 function ActivityLog({ items, memberships, releases }: { items: Activity[]; memberships: Membership[]; releases: ReleaseSummary[] }) {
@@ -485,11 +502,11 @@ function EffectChart({ rows, siteNames }: { rows: EvaluationRow[]; siteNames: Re
 
   return <section className="effect-panel"><div className="section-head"><div><p className="eyebrow">各站点</p><h2>效果趋势</h2></div></div>
     {rows.length === 0 ? <Empty>还没有站点上传效果结果。</Empty> : <>
-      <div className="effect-legend">{siteSeries.map((series) => <span key={series.siteId}><i className="effect-legend__line" style={{ background: series.color }} />{siteNames[series.siteId] || series.siteId}</span>)}</div>
+      <div className="effect-legend">{siteSeries.map((series) => <span key={series.siteId}><i className="effect-legend__line" aria-hidden="true" style={{ background: series.color }} />{siteNames[series.siteId] || series.siteId}</span>)}</div>
       <div className="effect-chart__scroll"><svg className="effect-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="各站点效果随联邦轮次的变化折线图">
-        {[.5, .6, .7, .8, .9, 1].map((tick) => <g key={tick}><line className="effect-chart__grid" x1={bounds.left} y1={y(tick)} x2={width - bounds.right} y2={y(tick)} /><text className="effect-chart__axis" x={bounds.left - 10} y={y(tick) + 4} textAnchor="end">{tick * 100}%</text></g>)}
+        {[.5, .6, .7, .8, .9, 1].map((tick) => <g key={tick}><line className="effect-chart__grid" x1={bounds.left} y1={y(tick)} x2={width - bounds.right} y2={y(tick)} /><text className="effect-chart__axis" x={bounds.left - 10} y={y(tick) + 4} textAnchor="end">{percentFormatter.format(tick)}</text></g>)}
         {labels.map((label, index) => labels.length <= 10 || index === labels.length - 1 || index % Math.ceil(labels.length / 8) === 0 ? <text className="effect-chart__axis" key={label} x={x(index)} y={height - 16} textAnchor="middle"><title>{index === 0 ? label : trend.rounds[index - 1].roundId}</title>{label}</text> : null)}
-        {siteSeries.map((series) => <g key={series.siteId}><path className="effect-chart__site-line" d={chartPath(series.values, x, y)} stroke={series.color} />{series.values.map((value, index) => value === null ? null : <circle key={index} className="effect-chart__point" cx={x(index)} cy={y(value)} r="3.5" fill={series.color}><title>{`${siteNames[series.siteId] || series.siteId} · ${labels[index]} · ${(value * 100).toFixed(1)}%`}</title></circle>)}</g>)}
+        {siteSeries.map((series) => <g key={series.siteId}><path className="effect-chart__site-line" d={chartPath(series.values, x, y)} stroke={series.color} />{series.values.map((value, index) => value === null ? null : <circle key={index} className="effect-chart__point" cx={x(index)} cy={y(value)} r="3.5" fill={series.color}><title>{`${siteNames[series.siteId] || series.siteId}，${labels[index]}，${percentFormatter.format(value)}`}</title></circle>)}</g>)}
       </svg></div>
     </>}
   </section>;
@@ -530,17 +547,17 @@ function SiteOperationTracks({ memberships, releases, activities }: { membership
     timelineRefs.current.forEach((timeline) => { if (timeline) timeline.scrollLeft = timeline.scrollWidth; });
   }, [releases.length]);
   return <section className="version-panel track-panel"><div className="section-head"><div><p className="eyebrow">联邦过程</p><h2>站点运行轨迹</h2></div><span>实心已完成 · 空心未完成</span></div>
-    <div className="track-guide">{trackGuide.map((item) => <div key={item.kind}><i className={`track-mark track-mark--${item.kind}`} /><span><strong>{item.label}</strong><small>{item.description}</small></span></div>)}</div>
+    <div className="track-guide">{trackGuide.map((item) => <div key={item.kind}><i className={`track-mark track-mark--${item.kind}`} aria-hidden="true" /><span><strong>{item.label}</strong><small>{item.description}</small></span></div>)}</div>
     {tracks.length === 0 ? <Empty>还没有站点接入这个应用。</Empty> : releases.length === 0 ? <Empty>还没有可追踪的联邦版本。</Empty> : <div className="site-tracks"><div className="site-track__columns"><span>站点状态</span><span>时间线 · 最新状态在右侧</span></div>{tracks.map((track, trackIndex) => {
       const member = members[track.siteId];
       const current = member.reported_release_id ? releaseNames[member.reported_release_id] || "历史联邦版本" : "尚未上报使用版本";
-      return <div className="site-track" key={track.siteId}><div className="site-track__site"><strong>{visibleName(member.display_name)}</strong><span>当前联邦版本：{current}</span><span>站点应用版本：{member.app_version || "尚未上报"}</span></div><div className="site-track__timeline" ref={(timeline) => { timelineRefs.current[trackIndex] = timeline; }}><div className="site-track__timeline-flow">{track.nodes.map((node, index) => <span className="site-track__event" key={`${node.releaseId}-${node.kind}-${index}`} title={trackNodeLabel(node)} role="img" aria-label={`${releaseNames[node.releaseId]}：${trackNodeLabel(node)}`}><i className={`track-mark track-mark--${node.kind}${node.complete ? "" : " track-mark--missing"}`} /><strong>{trackNodeShortLabel(node)}</strong><small>{releaseNames[node.releaseId]}</small></span>)}</div></div></div>;
+      return <div className="site-track" key={track.siteId}><div className="site-track__site"><strong>{visibleName(member.display_name)}</strong><span>当前联邦版本：{current}</span><span>站点应用版本：{member.app_version || "尚未上报"}</span></div><div className="site-track__timeline" ref={(timeline) => { timelineRefs.current[trackIndex] = timeline; }}><div className="site-track__timeline-flow">{track.nodes.map((node, index) => <span className="site-track__event" key={`${node.releaseId}-${node.kind}-${index}`} title={trackNodeLabel(node)} role="img" aria-label={`${releaseNames[node.releaseId]}：${trackNodeLabel(node)}`}><i className={`track-mark track-mark--${node.kind}${node.complete ? "" : " track-mark--missing"}`} aria-hidden="true" /><strong>{trackNodeShortLabel(node)}</strong><small>{releaseNames[node.releaseId]}</small></span>)}</div></div></div>;
     })}</div>}
   </section>;
 }
 
 function Evaluations({ items, memberships }: { items: Submission[]; memberships: Membership[] }) {
-  const percent = (value: unknown) => typeof value === "number" ? `${(value * 100).toFixed(1)}%` : "—";
+  const percent = (value: unknown) => typeof value === "number" ? percentFormatter.format(value) : "暂无";
   const rows = latestEvaluationRows(groupEvaluationResults(items));
   const siteNames = Object.fromEntries(memberships.map((member) => [member.site_id, visibleName(member.display_name)]));
   const rounds = new Map(buildEvaluationTrend(rows).rounds.map((round, index) => [round.roundId, `第 ${index + 1} 轮`]));
@@ -636,14 +653,14 @@ function VersionManagement({ appId, federationId, topology, submissions, release
     <div className="version-workbench__top">
       <section className="version-panel contribution-panel">
         <div className="section-head"><div><p className="eyebrow">下一联邦版本</p><h2>待联邦数据</h2></div><span>{newCount} / {contributionRows.length} 可用于生成</span></div>
-        <div className="contribution-list">{contributionRows.map((row) => <div key={row.site_id}><span><strong>{visibleName(row.display_name)}</strong></span><span><Status value={row.state === "new" ? "可用于生成" : row.state === "included" ? "等待新数据" : "尚未提交"} /><time>{row.submission ? formatTime(row.submission.created_at) : "—"}</time></span></div>)}</div>
+        <div className="contribution-list">{contributionRows.map((row) => <div key={row.site_id}><span><strong>{visibleName(row.display_name)}</strong></span><span><Status value={row.state === "new" ? "可用于生成" : row.state === "included" ? "等待新数据" : "尚未提交"} /><time>{row.submission ? formatTime(row.submission.created_at) : "暂无"}</time></span></div>)}</div>
         {contributionRows.length === 0 && <Empty>还没有站点接入这个应用。</Empty>}
         <div className="version-panel__action"><span>{allReady ? "所有站点已提交，可以生成下一版。" : "等待所有站点提交本轮内容。"}</span><button className="button button--primary" type="button" disabled={!allReady || busy !== ""} onClick={generate}>{busy === "generate" ? "生成中…" : "联邦生成"}</button></div>
       </section>
 
       <section className="version-panel version-library">
         <div className="section-head"><div><p className="eyebrow">可下发</p><h2>联邦版本库</h2></div><span>{releases.length} 个联邦版本</span></div>
-        <div className="version-options" role="listbox" aria-label="选择下发版本">{releases.map((release) => <button key={release.release_id} type="button" role="option" className={release.release_id === selectedId ? "version-option selected" : "version-option"} aria-selected={release.release_id === selectedId} onClick={() => setSelectedId(release.release_id)}><span className="version-option__radio" aria-hidden="true" /><span><strong>{labels.get(release.release_id)}</strong><small>{formatTime(release.created_at)}</small></span><span className="version-option__delivery">{release.pending > 0 ? `${release.pending} 待下发` : `${release.delivery_count} 已下发`}</span></button>)}</div>
+        <div className="version-options">{releases.map((release) => <button key={release.release_id} type="button" className={release.release_id === selectedId ? "version-option selected" : "version-option"} aria-pressed={release.release_id === selectedId} onClick={() => setSelectedId(release.release_id)}><span className="version-option__radio" aria-hidden="true" /><span><strong>{labels.get(release.release_id)}</strong><small>{formatTime(release.created_at)}</small></span><span className="version-option__delivery">{release.pending > 0 ? `${release.pending} 待下发` : `${release.delivery_count} 已下发`}</span></button>)}</div>
         {releases.length === 0 && <Empty>还没有生成联邦版本。</Empty>}
         <div className="version-panel__action"><span>{selected ? `已选择 ${labels.get(selected.release_id) || "联邦版本"}` : "先选择一个版本"}</span><button className="button" type="button" disabled={!selected || !detail || stageableSites.length === 0 || busy !== ""} onClick={distribute}>{busy === "distribute" ? "下发中…" : stageableSites.length > 0 ? `下发至 ${stageableSites.length} 个站点` : "已全部下发"}</button></div>
       </section>

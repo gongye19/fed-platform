@@ -28,7 +28,7 @@ const moduleDetails = {
   },
   federation: {
     title: "联邦域",
-    summary: "联邦域把同一个应用中需要协作的站点组织在一起。一个应用可以按需要建立多个联邦域。",
+    summary: "联邦域把同一个应用中需要协作的站点组织在一起。每个应用只有一个独立的联邦域。",
   },
   site: {
     title: "站点",

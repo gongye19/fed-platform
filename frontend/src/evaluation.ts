@@ -29,7 +29,7 @@ export type SiteTrackNode = {
 export function groupEvaluationResults(items: EvaluationInput[]) {
   const grouped = new Map<string, EvaluationRow>();
   for (const item of items) {
-    const roundId = String(item.metadata.round_id || "—");
+    const roundId = String(item.metadata.round_id || "未标记");
     const explicitExperiment = typeof item.metadata.experiment_id === "string" ? item.metadata.experiment_id : null;
     // ponytail: legacy rounds encode the experiment in "*-rN"; remove after all apps send experiment_id.
     const inferredExperiment = roundId.match(/^(.*)-r\d+$/)?.[1] || null;
