@@ -560,9 +560,8 @@ function deliveryLabel(delivery: Delivery) {
   return "已接收，未采用";
 }
 
-function FederationVersionTable({ releases, siteNames, dataNames, versionNames }: {
+function FederationVersionTable({ releases, dataNames, versionNames }: {
   releases: ReleaseSummary[];
-  siteNames: Map<string, string>;
   dataNames: Map<string, string>;
   versionNames: Map<string, string>;
 }) {
@@ -570,7 +569,7 @@ function FederationVersionTable({ releases, siteNames, dataNames, versionNames }
     <div className="version-table__scroll"><table><thead><tr><th>版本编号</th><th>生成时间</th><th>使用的站点数据</th></tr></thead><tbody>{releases.map((release) => <tr key={release.release_id}>
       <td><strong translate="no">{versionNames.get(release.release_id) || "数据未关联"}</strong></td>
       <td><time>{formatTime(release.created_at)}</time></td>
-      <td><div className="version-table__items">{release.inputs?.length > 0 ? release.inputs.map((input) => <span key={input.submission_id}><strong>{dataNames.get(input.submission_id) || "数据未编号"}</strong><small>{siteNames.get(input.site_id) || "站点未编号"}</small></span>) : <em>输入未关联</em>}</div></td>
+      <td>{release.inputs?.length > 0 ? release.inputs.map((input) => dataNames.get(input.submission_id) || "数据未编号").join("、") : "输入未关联"}</td>
     </tr>)}</tbody></table></div>
     {releases.length === 0 && <Empty>还没有生成联邦版本。</Empty>}
   </section>;
@@ -608,8 +607,6 @@ function VersionManagement({ appId, federationId, topology, submissions, release
   const stageableSites = topology.memberships.filter((member) => member.can_receive && !deliveredSites.has(member.site_id)).map((member) => member.site_id);
   const deliveriesBySite = new Map((selected?.deliveries || []).map((delivery) => [delivery.site_id, delivery]));
   const codes = applicationCodes(topology.memberships, submissions, releases);
-  const useCount = new Map<string, number>();
-  visibleReleases.forEach((release) => (release.inputs || []).forEach((input) => useCount.set(input.submission_id, (useCount.get(input.submission_id) || 0) + 1)));
 
   useEffect(() => {
     if (!selectedId || !visibleReleases.some((release) => release.release_id === selectedId)) {
@@ -665,18 +662,18 @@ function VersionManagement({ appId, federationId, topology, submissions, release
 
   return <div className="version-workbench">
     {message && <p className={`message message--${message.tone}`} role={message.tone === "error" ? "alert" : "status"}>{message.text}<button onClick={() => setMessage(null)} aria-label="关闭消息">×</button></p>}
-    <FederationVersionTable releases={visibleReleases} siteNames={codes.sites} dataNames={codes.data} versionNames={codes.releases} />
+    <FederationVersionTable releases={visibleReleases} dataNames={codes.data} versionNames={codes.releases} />
     <section className="version-panel contribution-panel">
       <div className="section-head"><div><p className="eyebrow">选择站点上传数据</p><h2>联邦生成</h2></div><span>已选 {selectedInputs.length} / {contributions.length}</span></div>
-      <div className="batch-groups">{topology.memberships.map((member) => { const siteContributions = contributions.filter((submission) => submission.site_id === member.site_id); return <section className="batch-group" key={member.site_id}><div className="batch-group__head"><strong>{codes.sites.get(member.site_id) || "站点未编号"}</strong><span>{siteContributions.length} 份数据</span></div><div className="batch-group__list">{siteContributions.map((submission) => <label key={submission.submission_id} className={selectedInputSet.has(submission.submission_id) ? "batch-option selected" : "batch-option"}><input type="checkbox" name="generation-input" value={submission.submission_id} checked={selectedInputSet.has(submission.submission_id)} onChange={(event) => setSelectedInputs((current) => event.target.checked ? [...current, submission.submission_id] : current.filter((item) => item !== submission.submission_id))} /><span><strong>{codes.data.get(submission.submission_id) || "数据未编号"}</strong><small>{formatTime(submission.created_at)}</small></span><em>{useCount.get(submission.submission_id) ? `已用于 ${useCount.get(submission.submission_id)} 个版本` : "尚未使用"}</em></label>)}{siteContributions.length === 0 && <p className="batch-group__empty">暂无上传数据</p>}</div></section>; })}</div>
+      <div className="batch-groups">{topology.memberships.map((member) => { const siteContributions = contributions.filter((submission) => submission.site_id === member.site_id); return <section className="batch-group" key={member.site_id}><div className="batch-group__head"><strong>{codes.sites.get(member.site_id) || "站点未编号"}</strong><span>{siteContributions.length} 份数据</span></div><div className="batch-group__list">{siteContributions.map((submission) => <label key={submission.submission_id} className={selectedInputSet.has(submission.submission_id) ? "batch-option selected" : "batch-option"}><input type="checkbox" name="generation-input" value={submission.submission_id} checked={selectedInputSet.has(submission.submission_id)} onChange={(event) => setSelectedInputs((current) => event.target.checked ? [...current, submission.submission_id] : current.filter((item) => item !== submission.submission_id))} /><span><strong>{codes.data.get(submission.submission_id) || "数据未编号"}</strong><small>{formatTime(submission.created_at)}</small></span></label>)}{siteContributions.length === 0 && <p className="batch-group__empty">暂无上传数据</p>}</div></section>; })}</div>
       {contributions.length === 0 && <Empty>还没有站点上传可联邦数据。</Empty>}
       <div className="version-panel__action"><button className="text-button" type="button" disabled={contributions.length === 0 || busy !== ""} onClick={() => setSelectedInputs(contributions.filter((item) => !usedInputs.has(item.submission_id)).map((item) => item.submission_id))}>选择尚未使用的数据</button><button className="button button--primary" type="button" disabled={selectedInputs.length === 0 || busy !== ""} onClick={generate}>{busy === "generate" ? "生成中…" : `用 ${selectedInputs.length} 份数据生成`}</button></div>
     </section>
 
     <section className="version-panel distribution-panel">
-      <div className="section-head"><div><p className="eyebrow">选择版本和目标站点</p><h2>版本下发</h2></div><span>{selected ? codes.releases.get(selected.release_id) : "暂无版本"}</span></div>
+      <div className="section-head"><div><p className="eyebrow">选择版本和目标站点</p><h2>版本下发</h2></div></div>
       <div className="distribution-body">
-        <fieldset className="release-options"><legend>联邦版本</legend><div className="release-options__list">{visibleReleases.map((release) => <label className="release-option" key={release.release_id}><input type="radio" name="delivery-release" value={release.release_id} checked={selectedId === release.release_id} onChange={(event) => setSelectedId(event.target.value)} /><span><strong translate="no">{codes.releases.get(release.release_id) || "数据未关联"}</strong><time>{formatTime(release.created_at)}</time></span></label>)}{visibleReleases.length === 0 && <p className="release-options__empty">暂无联邦版本</p>}</div></fieldset>
+        <fieldset className="release-options"><legend>联邦版本</legend><div className="release-options__list">{visibleReleases.map((release) => <label className="release-option" key={release.release_id}><input type="radio" name="delivery-release" value={release.release_id} checked={selectedId === release.release_id} onChange={(event) => setSelectedId(event.target.value)} /><strong translate="no">{codes.releases.get(release.release_id) || "数据未关联"}</strong></label>)}{visibleReleases.length === 0 && <p className="release-options__empty">暂无联邦版本</p>}</div></fieldset>
         <fieldset className="delivery-targets" disabled={!selected}><legend>下发站点</legend>{topology.memberships.filter((member) => member.can_receive).map((member) => { const delivery = deliveriesBySite.get(member.site_id); const delivered = deliveredSites.has(member.site_id); return <label className="target-option" key={member.site_id}><input type="checkbox" name="delivery-site" value={member.site_id} disabled={delivered} checked={selectedSites.includes(member.site_id)} onChange={(event) => setSelectedSites((current) => event.target.checked ? [...current, member.site_id] : current.filter((item) => item !== member.site_id))} /><span><strong>{codes.sites.get(member.site_id) || "站点未编号"}</strong><small>{delivery ? deliveryLabel(delivery) : "可下发"}</small></span></label>; })}</fieldset>
       </div>
       <div className="version-panel__action"><span>{selectedSites.length > 0 ? `将下发给 ${selectedSites.length} 个站点` : stageableSites.length > 0 ? "请选择下发目标" : "所有可用站点均已下发"}</span><button className="button" type="button" disabled={!selected || selectedSites.length === 0 || busy !== ""} onClick={distribute}>{busy === "distribute" ? "下发中…" : "下发所选版本"}</button></div>

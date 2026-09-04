@@ -283,50 +283,42 @@ td small { margin-top: 4px; }
 .batch-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); min-height: 310px; max-height: 520px; overflow-y: auto; background: var(--line); gap: 1px; }
 .batch-group { min-width: 0; background: var(--surface-1); }
 .batch-group__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px; padding: 0 12px; border-bottom: 1px solid var(--line); }
-.batch-group__head strong { overflow: hidden; font-size: 11px; font-weight: 560; text-overflow: ellipsis; white-space: nowrap; }
-.batch-group__head span { flex: none; color: var(--muted); font: 9px/1 "Geist Mono Variable", monospace; }
+.batch-group__head strong { overflow: hidden; font-size: 13px; font-weight: 540; text-overflow: ellipsis; white-space: nowrap; }
+.batch-group__head span { flex: none; color: var(--muted); font-size: 11px; }
 .batch-group__list { padding: 7px; }
 .batch-group__empty { margin: 24px 6px; color: var(--muted); font-size: 11px; text-align: center; }
-.batch-option { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: start; gap: 5px 9px; min-height: 68px; padding: 10px 8px; color: var(--secondary); border: 1px solid transparent; border-radius: var(--radius-sm); cursor: pointer; content-visibility: auto; contain-intrinsic-size: auto 68px; transition: background 150ms ease-out, border-color 150ms ease-out; }
+.batch-option { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 9px; min-height: 52px; padding: 8px; color: var(--ink); border: 1px solid transparent; border-radius: var(--radius-sm); cursor: pointer; content-visibility: auto; contain-intrinsic-size: auto 52px; transition: background 150ms ease-out, border-color 150ms ease-out; }
 .batch-option:hover { background: rgba(255, 255, 255, .025); }
 .batch-option.selected { background: rgba(94, 106, 210, .08); border-color: rgba(123, 134, 235, .26); }
 .batch-option input, .delivery-targets input { width: 15px; min-height: auto; accent-color: var(--accent); }
-.batch-option input { grid-row: 1 / span 2; margin-top: 2px; }
-.batch-option > span { display: grid; gap: 5px; min-width: 0; }
-.batch-option strong { overflow: hidden; font-size: 12px; font-weight: 560; text-overflow: ellipsis; white-space: nowrap; }
-.batch-option small { color: var(--muted); font: 9px/1.2 "Geist Mono Variable", monospace; }
-.batch-option em { grid-column: 2; overflow: hidden; color: var(--muted); font: normal 9px/1 "Geist Mono Variable", monospace; text-overflow: ellipsis; white-space: nowrap; }
-.distribution-body { display: grid; gap: 22px; min-height: 310px; padding: 18px; align-content: start; }
+.batch-option > span { display: grid; gap: 3px; min-width: 0; }
+.batch-option strong { overflow: hidden; font-size: 13px; font-weight: 540; text-overflow: ellipsis; white-space: nowrap; }
+.batch-option small { color: var(--muted); font-size: 11px; }
+.distribution-panel > .section-head { min-height: 64px; padding: 14px 18px; }
+.distribution-body { display: grid; gap: 12px; padding: 12px 18px; align-content: start; }
 .release-options, .delivery-targets { margin: 0; padding: 0; border: 0; }
 .release-options legend, .delivery-targets legend { width: 100%; padding: 0 0 10px; color: var(--muted); font-size: 10px; font-weight: 520; }
-.release-options__list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; max-height: 300px; overflow-y: auto; }
-.release-option { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: center; gap: 10px; min-height: 70px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; }
+.release-options__list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; max-height: 240px; overflow-y: auto; }
+.release-option { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: center; gap: 8px; min-height: 40px; padding: 6px 10px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; }
 .release-option:has(input:checked) { background: rgba(94, 106, 210, .08); border-color: rgba(123, 134, 235, .34); }
 .release-option input { width: 15px; min-height: auto; accent-color: var(--accent); }
-.release-option > span { display: grid; gap: 7px; min-width: 0; }
-.release-option time { overflow: hidden; color: var(--muted); font: 9px/1 "Geist Mono Variable", monospace; text-overflow: ellipsis; white-space: nowrap; }
+.release-option strong { overflow: hidden; font-size: 13px; font-weight: 540; text-overflow: ellipsis; white-space: nowrap; }
 .release-options__empty { grid-column: 1 / -1; margin: 24px 0; color: var(--muted); font-size: 11px; text-align: center; }
 .delivery-targets { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 0; padding: 0; border: 0; }
-.delivery-targets label { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: center; gap: 9px; min-width: 0; min-height: 58px; padding: 9px 10px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; }
+.delivery-targets label { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: center; gap: 8px; min-width: 0; min-height: 44px; padding: 7px 10px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; }
 .delivery-targets input { flex: none; }
 .delivery-targets label:has(input:checked) { background: rgba(94, 106, 210, .08); border-color: rgba(123, 134, 235, .3); }
 .delivery-targets label:has(input:disabled) { opacity: .56; cursor: default; }
 .delivery-targets span { display: grid; gap: 4px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.delivery-targets strong { overflow: hidden; font-size: 11px; font-weight: 560; text-overflow: ellipsis; }
-.delivery-targets small { color: var(--muted); font: 9px/1 "Geist Mono Variable", monospace; }
+.delivery-targets strong { overflow: hidden; font-size: 12px; font-weight: 540; text-overflow: ellipsis; }
+.delivery-targets small { color: var(--muted); font-size: 10px; }
+.distribution-panel .version-panel__action { min-height: 56px; padding: 10px 18px; }
 .version-table__scroll { overflow-x: auto; overscroll-behavior-inline: contain; }
 .version-table table { min-width: 760px; }
 .version-table th:nth-child(1) { width: 22%; }
 .version-table th:nth-child(2) { width: 24%; }
 .version-table th:nth-child(3) { width: auto; }
-.version-table tbody tr { content-visibility: auto; contain-intrinsic-size: auto 104px; }
-.version-table td { vertical-align: top; }
-.version-table time { color: var(--secondary); font: 10px/1.4 "Geist Mono Variable", monospace; }
-.version-table__items { display: grid; grid-template-columns: repeat(3, minmax(100px, 1fr)); gap: 10px; }
-.version-table__items > span { display: grid; gap: 4px; min-width: 0; padding-left: 10px; border-left: 1px solid var(--line-strong); }
-.version-table__items strong { overflow: hidden; color: var(--secondary); font-size: 11px; font-weight: 540; text-overflow: ellipsis; white-space: nowrap; }
-.version-table__items small { color: var(--muted); font: 9px/1.2 "Geist Mono Variable", monospace; }
-.version-table__items em { color: var(--muted); font-size: 10px; font-style: normal; }
+.version-table tbody tr { content-visibility: auto; contain-intrinsic-size: auto 48px; }
 
 .dialog { width: min(680px, calc(100vw - 28px)); max-height: calc(100dvh - 40px); padding: 0; overflow: auto; overscroll-behavior: contain; color: var(--ink); background: var(--surface-1); border: 1px solid var(--line-strong); border-radius: var(--radius-md); box-shadow: 0 24px 80px rgba(0, 0, 0, .55); }
 .dialog::backdrop { background: rgba(3, 4, 5, .72); backdrop-filter: blur(4px); }
@@ -417,7 +409,6 @@ td small { margin-top: 4px; }
   .toolbar { align-items: stretch; }
   .batch-groups { grid-template-columns: 1fr; max-height: none; }
   .release-options__list { grid-template-columns: 1fr; }
-  .version-table__items { grid-template-columns: 1fr; }
   .version-panel__action { align-items: stretch; flex-direction: column; gap: 10px; }
   .version-panel__action .button { width: 100%; }
   .timeline__item { grid-template-columns: 16px 1fr; }
