@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { latestReleaseGroup, releaseCode, releaseLabels } from "../src/versions.ts";
+import { contributionBatchNumbers, latestReleaseGroup, releaseCode, releaseLabels } from "../src/versions.ts";
 
 test("uses stable opaque release codes without sequence semantics", () => {
   assert.equal(releaseCode("b9d463cb-b9c1-42e2-8898-6c7fbea5cc5e"), "B9D463CB");
@@ -24,4 +24,15 @@ test("keeps only the latest federation experiment releases", () => {
   ];
 
   assert.deepEqual(latestReleaseGroup(releases).map((release) => release.release_id), ["current-3", "current-2", "current-1", "selected-inputs"]);
+});
+
+test("numbers contribution batches per site without counting evaluation uploads", () => {
+  const numbers = contributionBatchNumbers([
+    { submission_id: "a-eval", site_id: "a", purpose: "evaluation", created_at: "2026-01-02T00:00:00Z" },
+    { submission_id: "a-2", site_id: "a", purpose: "contribution", created_at: "2026-01-03T00:00:00Z" },
+    { submission_id: "b-1", site_id: "b", purpose: "contribution", created_at: "2026-01-02T00:00:00Z" },
+    { submission_id: "a-1", site_id: "a", purpose: "contribution", created_at: "2026-01-01T00:00:00Z" },
+  ]);
+
+  assert.deepEqual(Array.from(numbers), [["a-1", 1], ["b-1", 1], ["a-2", 2]]);
 });

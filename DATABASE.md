@@ -65,7 +65,7 @@ Application 中重复，但它们在主键、外键、查询和对象存储路�
 - `app_id / federation_id / site_id / type_name`：协议中的稳定字符串 ID，注册后不可改名。
 - `artifact_digest`：`sha256:<64 hex>`，内容改变就产生新 Artifact。
 - Submission、Task、Release、Delivery、Event、Command、Job：服务端生成 UUID v4。
-- Submission 在站点内另有稳定批次编号；Release 的创建序号只供内部审计排序。前端从不可变 UUID 显示不带顺序含义的短编号。
+- Submission 在站点内保留所有上传的内部顺序；前端只对待联邦贡献独立显示批次 1、2、3，不把效果回传计入批次。Release 的创建序号只供内部审计排序，前端从不可变 UUID 显示不带顺序含义的短编号。
 - Command cursor：PostgreSQL `BIGINT GENERATED ALWAYS AS IDENTITY`，只要求单调，不要求连续。
 - 时间统一使用 `TIMESTAMPTZ` 和 UTC；前端负责按用户时区展示。
 - 状态使用 `TEXT + CHECK`，不用难迁移的 PostgreSQL ENUM。
@@ -98,7 +98,7 @@ Application 中重复，但它们在主键、外键、查询和对象存储路�
 |---|---|---|
 | `artifacts` | digest、type、size、metadata、storage_key | `(app_id, federation_id, digest)` 主键；不可变 |
 | `artifact_lineage` | 新 Artifact 由哪些输入 Artifact 产生 | 父子必须在同一 app/federation |
-| `submissions` | 哪个 Site 在何时提交了哪个 Artifact、站点内批次编号 | 按 Site 的 idempotency key 与批次编号唯一 |
+| `submissions` | 哪个 Site 在何时提交了哪个 Artifact、站点内上传顺序 | 按 Site 的 idempotency key 与上传顺序唯一 |
 | `tasks` | Task 类型、目标 Site、输入引用、当前状态 | 必须关联有效 Membership |
 | `releases` | 不可变发布头、内部创建序号、生成任务、创建时间 | 属于一个 app/federation；生成任务至多产生一个版本 |
 | `release_inputs` | 每个 Release 精确使用的 Submission 及顺序 | Release 与 Submission 多对多 |

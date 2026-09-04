@@ -1,6 +1,6 @@
 import { FormEvent, lazy, ReactNode, Suspense, useEffect, useRef, useState, type MouseEvent } from "react";
 import { buildEvaluationTrend, groupEvaluationResults, latestEvaluationRows, type EvaluationRow } from "./evaluation";
-import { latestReleaseGroup, releaseCode, releaseLabels } from "./versions";
+import { contributionBatchNumbers, latestReleaseGroup, releaseCode, releaseLabels } from "./versions";
 
 const PlatformOverview = lazy(() => import("./PlatformOverview"));
 
@@ -566,27 +566,27 @@ function deliveryLabel(delivery: Delivery) {
 }
 
 function CurrentSiteVersions({ memberships }: { memberships: Membership[] }) {
-  return <section className="version-panel current-versions"><div className="section-head"><div><p className="eyebrow">按站点</p><h2>当前使用的联邦版本</h2></div><span>{memberships.length} 个站点</span></div>
-    {memberships.length === 0 ? <Empty>还没有站点接入这个应用。</Empty> : <div className="current-version-list">
-      <div className="current-version-list__head"><span>站点</span><span>当前联邦版本</span></div>
-      {memberships.map((member) => <div className="current-version-list__row" key={member.site_id}><strong>{visibleName(member.display_name)}</strong><span>{member.reported_release_id ? <code className="release-code" title={member.reported_release_id} translate="no">{releaseCode(member.reported_release_id)}</code> : <Status value="尚未采用" />}</span></div>)}
-    </div>}
+  return <section className="version-overview__pane current-versions"><div className="version-overview__pane-head"><h3>站点当前版本</h3><span>{memberships.length}</span></div>
+    {memberships.length === 0 ? <Empty>还没有站点接入这个应用。</Empty> : <div className="current-version-list"><table className="site-version-table"><thead><tr><th>站点</th><th>当前联邦版本</th></tr></thead><tbody>
+      {memberships.map((member) => <tr key={member.site_id}><td><strong>{visibleName(member.display_name)}</strong></td><td>{member.reported_release_id ? <code className="release-code" title={member.reported_release_id} translate="no">{releaseCode(member.reported_release_id)}</code> : <Status value="尚未采用" />}</td></tr>)}
+    </tbody></table></div>}
   </section>;
 }
 
-function FederationVersionTable({ releases, memberships, selectedId, onSelect }: {
+function FederationVersionTable({ releases, memberships, batchNumbers, selectedId, onSelect }: {
   releases: ReleaseSummary[];
   memberships: Membership[];
+  batchNumbers: Map<string, number>;
   selectedId: string;
   onSelect: (releaseId: string) => void;
 }) {
   const labels = releaseLabels(releases);
   const siteNames = new Map(memberships.map((member) => [member.site_id, visibleName(member.display_name)]));
-  return <section className="version-panel version-table"><div className="section-head"><div><p className="eyebrow">按联邦版本</p><h2>版本来源</h2></div><span>{releases.length} 个版本</span></div>
+  return <section className="version-overview__pane version-table"><div className="version-overview__pane-head"><h3>联邦版本来源</h3><span>{releases.length}</span></div>
     <div className="version-table__scroll"><table><thead><tr><th>版本编号</th><th>生成时间</th><th>使用的站点数据</th></tr></thead><tbody>{releases.map((release) => <tr className={release.release_id === selectedId ? "selected" : ""} key={release.release_id}>
       <td><button type="button" className="release-select" aria-pressed={release.release_id === selectedId} title={release.release_id} onClick={() => onSelect(release.release_id)}><code translate="no">{labels.get(release.release_id)}</code><small>{release.release_id === selectedId ? "已选择" : "选择"}</small></button></td>
       <td><time>{formatTime(release.created_at)}</time></td>
-      <td><div className="version-table__items">{release.inputs?.length > 0 ? release.inputs.map((input) => <span key={input.submission_id}><strong>{siteNames.get(input.site_id) || input.site_id}</strong><small>{batchLabel(input.submission_number)}</small></span>) : <em>历史输入未关联</em>}</div></td>
+      <td><div className="version-table__items">{release.inputs?.length > 0 ? release.inputs.map((input) => <span key={input.submission_id}><strong>{siteNames.get(input.site_id) || input.site_id}</strong><small>{batchLabel(batchNumbers.get(input.submission_id) || input.submission_number)}</small></span>) : <em>输入未关联</em>}</div></td>
     </tr>)}</tbody></table></div>
     {releases.length === 0 && <Empty>还没有生成联邦版本。</Empty>}
   </section>;
@@ -621,6 +621,7 @@ function VersionManagement({ appId, federationId, topology, submissions, release
   const deliveredSites = new Set((selected?.deliveries || []).filter((delivery) => delivery.state !== "failed" || delivery.failed_action !== "stage").map((delivery) => delivery.site_id));
   const stageableSites = topology.memberships.filter((member) => member.can_receive && !deliveredSites.has(member.site_id)).map((member) => member.site_id);
   const labels = releaseLabels(releases);
+  const batchNumbers = contributionBatchNumbers(submissions);
   const siteNames = new Map(topology.memberships.map((member) => [member.site_id, visibleName(member.display_name)]));
   const useCount = new Map<string, number>();
   releases.forEach((release) => (release.inputs || []).forEach((input) => useCount.set(input.submission_id, (useCount.get(input.submission_id) || 0) + 1)));
@@ -679,12 +680,14 @@ function VersionManagement({ appId, federationId, topology, submissions, release
 
   return <div className="version-workbench">
     {message && <p className={`message message--${message.tone}`} role={message.tone === "error" ? "alert" : "status"}>{message.text}<button onClick={() => setMessage(null)} aria-label="关闭消息">×</button></p>}
-    <CurrentSiteVersions memberships={topology.memberships} />
-    <FederationVersionTable memberships={topology.memberships} releases={releases} selectedId={selectedId} onSelect={setSelectedId} />
+    <section className="version-overview">
+      <div className="version-overview__head"><h2>版本总览</h2><div><span>{topology.memberships.length} 个站点</span><span>{releases.length} 个联邦版本</span></div></div>
+      <div className="version-overview__grid"><CurrentSiteVersions memberships={topology.memberships} /><FederationVersionTable memberships={topology.memberships} releases={releases} batchNumbers={batchNumbers} selectedId={selectedId} onSelect={setSelectedId} /></div>
+    </section>
     <div className="version-workbench__top">
       <section className="version-panel contribution-panel">
         <div className="section-head"><div><p className="eyebrow">生成输入</p><h2>选择站点上传批次</h2></div><span>已选 {selectedInputs.length} / {contributions.length}</span></div>
-        <div className="batch-list">{contributions.map((submission) => <label key={submission.submission_id} className={selectedInputSet.has(submission.submission_id) ? "batch-option selected" : "batch-option"}><input type="checkbox" name="generation-input" value={submission.submission_id} checked={selectedInputSet.has(submission.submission_id)} onChange={(event) => setSelectedInputs((current) => event.target.checked ? [...current, submission.submission_id] : current.filter((item) => item !== submission.submission_id))} /><span><strong>{siteNames.get(submission.site_id) || submission.site_id}</strong><small>{batchLabel(submission.submission_number)} · {formatTime(submission.created_at)}</small></span><em>{useCount.get(submission.submission_id) ? `已用于 ${useCount.get(submission.submission_id)} 个版本` : "尚未使用"}</em></label>)}</div>
+        <div className="batch-list">{contributions.map((submission) => <label key={submission.submission_id} className={selectedInputSet.has(submission.submission_id) ? "batch-option selected" : "batch-option"}><input type="checkbox" name="generation-input" value={submission.submission_id} checked={selectedInputSet.has(submission.submission_id)} onChange={(event) => setSelectedInputs((current) => event.target.checked ? [...current, submission.submission_id] : current.filter((item) => item !== submission.submission_id))} /><span><strong>{siteNames.get(submission.site_id) || submission.site_id}</strong><small>{batchLabel(batchNumbers.get(submission.submission_id) || submission.submission_number)} · {formatTime(submission.created_at)}</small></span><em>{useCount.get(submission.submission_id) ? `已用于 ${useCount.get(submission.submission_id)} 个版本` : "尚未使用"}</em></label>)}</div>
         {contributions.length === 0 && <Empty>还没有站点上传可联邦数据。</Empty>}
         <div className="version-panel__action"><button className="text-button" type="button" disabled={contributions.length === 0 || busy !== ""} onClick={() => setSelectedInputs(contributions.filter((item) => !usedInputs.has(item.submission_id)).map((item) => item.submission_id))}>选择尚未使用的批次</button><button className="button button--primary" type="button" disabled={selectedInputs.length === 0 || busy !== ""} onClick={generate}>{busy === "generate" ? "生成中…" : `用 ${selectedInputs.length} 个批次生成`}</button></div>
       </section>
