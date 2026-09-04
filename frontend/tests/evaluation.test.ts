@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildEvaluationTrend, buildSiteTracks, groupEvaluationResults } from "../src/evaluation.ts";
+import { buildEvaluationTrend, buildSiteTracks, groupEvaluationResults, latestEvaluationRows } from "../src/evaluation.ts";
 
 test("combines baseline and candidate reports per round and site", () => {
   const rows = groupEvaluationResults([
@@ -10,9 +10,20 @@ test("combines baseline and candidate reports per round and site", () => {
   ]);
 
   assert.deepEqual(rows, [
-    { key: "round-1:site-a", roundId: "round-1", siteId: "site-a", baseline: 0.6, candidate: 0.8, sampleSize: 10, createdAt: "2026-01-01T00:01:00Z" },
-    { key: "round-1:site-b", roundId: "round-1", siteId: "site-b", baseline: 0.7, candidate: null, sampleSize: null, createdAt: "2026-01-01T00:02:00Z" },
+    { key: "round-1:site-a", roundId: "round-1", experimentId: null, siteId: "site-a", baseline: 0.6, candidate: 0.8, sampleSize: 10, createdAt: "2026-01-01T00:01:00Z" },
+    { key: "round-1:site-b", roundId: "round-1", experimentId: null, siteId: "site-b", baseline: 0.7, candidate: null, sampleSize: null, createdAt: "2026-01-01T00:02:00Z" },
   ]);
+});
+
+test("shows only the latest experiment while retaining its federation rounds", () => {
+  const rows = groupEvaluationResults([
+    { site_id: "site-a", created_at: "2026-01-01T00:00:00Z", metadata: { round_id: "old-run-r1", candidate_accuracy: 0.7 } },
+    { site_id: "site-a", created_at: "2026-01-02T00:00:00Z", metadata: { round_id: "current-run-r1", candidate_accuracy: 0.8 } },
+    { site_id: "site-a", created_at: "2026-01-03T00:00:00Z", metadata: { round_id: "current-run-r2", candidate_accuracy: 0.9 } },
+    { site_id: "site-a", created_at: "2026-01-04T00:00:00Z", metadata: { round_id: "current-run-r3", candidate_accuracy: 0.95 } },
+  ]);
+
+  assert.deepEqual(latestEvaluationRows(rows).map((row) => row.roundId), ["current-run-r1", "current-run-r2", "current-run-r3"]);
 });
 
 test("builds site and weighted total trends in chronological round order", () => {

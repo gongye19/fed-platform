@@ -1,6 +1,6 @@
 import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import PlatformOverview from "./PlatformOverview";
-import { buildEvaluationTrend, buildSiteTracks, groupEvaluationResults, type EvaluationRow, type SiteTrackEvent } from "./evaluation";
+import { buildEvaluationTrend, buildSiteTracks, groupEvaluationResults, latestEvaluationRows, type EvaluationRow, type SiteTrackEvent } from "./evaluation";
 import { siteContributionRows } from "./versions";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
@@ -420,8 +420,8 @@ function ApplicationDetail({ appId, section, navigate }: { appId: string; sectio
     <div className="app-state"><Status value={app.status} /><span>Agent</span><Status value={app.agent_status} /></div>
     {error && <ErrorMessage error={error} />}
     <nav className="app-nav" aria-label={`${app.display_name} 导航`}>{APP_SECTIONS.map(([id, label]) => <button key={id} className={section === id ? "active" : ""} aria-current={section === id ? "page" : undefined} onClick={() => navigate(`${base}/${id}`)}>{label}</button>)}</nav>
-    {section === "overview" && <ApplicationSites topology={topology} />}
-    {section === "evaluations" && <Evaluations items={evaluations} memberships={topology.memberships} releases={releases} activities={activities.filter((item) => !item.federation_id || item.federation_id === federationId)} />}
+    {section === "overview" && <div className="panel-stack"><ApplicationSites topology={topology} /><SiteOperationTracks memberships={topology.memberships} releases={releases} activities={activities.filter((item) => !item.federation_id || item.federation_id === federationId)} /></div>}
+    {section === "evaluations" && <Evaluations items={evaluations} memberships={topology.memberships} />}
     {section === "versions" && <VersionManagement appId={appId} federationId={federationId} topology={topology} submissions={submissions} releases={releases} onRefresh={async () => { await Promise.all([loadTopology(), loadChannel()]); }} />}
     {section === "timeline" && <ActivityTimeline items={activities} />}
     {section === "logs" && <ActivityLog items={activities} />}
@@ -501,11 +501,11 @@ function SiteOperationTracks({ memberships, releases, activities }: { membership
   </section>;
 }
 
-function Evaluations({ items, memberships, releases, activities }: { items: Submission[]; memberships: Membership[]; releases: ReleaseSummary[]; activities: Activity[] }) {
+function Evaluations({ items, memberships }: { items: Submission[]; memberships: Membership[] }) {
   const percent = (value: unknown) => typeof value === "number" ? `${(value * 100).toFixed(1)}%` : "—";
-  const rows = groupEvaluationResults(items);
+  const rows = latestEvaluationRows(groupEvaluationResults(items));
   const siteNames = Object.fromEntries(memberships.map((member) => [member.site_id, member.display_name]));
-  return <div className="evaluation-workbench"><EffectChart rows={rows} siteNames={siteNames} /><SiteOperationTracks memberships={memberships} releases={releases} activities={activities} /><section className="table-wrap"><div className="section-head"><div><p className="eyebrow">每轮站点结果</p><h2>结果明细</h2></div><span>{rows.length} 条结果</span></div><table><thead><tr><th>轮次</th><th>站点</th><th>联邦前</th><th>联邦后</th><th>结果</th><th>样本数</th><th>上传时间</th></tr></thead><tbody>{rows.map((row) => { const change = row.baseline === null || row.candidate === null ? null : row.candidate - row.baseline; const result = change === null ? "等待联邦结果" : change > 0.0001 ? "提升" : change < -0.0001 ? "下降" : "持平"; return <tr key={row.key}><td className="mono">{row.roundId}</td><td><strong>{siteNames[row.siteId] || row.siteId}</strong><small className="mono">{row.siteId}</small></td><td>{percent(row.baseline)}</td><td>{percent(row.candidate)}</td><td><span className={`evaluation-result evaluation-result--${result === "提升" ? "up" : result === "下降" ? "down" : result === "持平" ? "same" : "waiting"}`}>{result}</span></td><td>{row.sampleSize ?? "—"}</td><td>{formatTime(row.createdAt)}</td></tr>; })}</tbody></table>{rows.length === 0 && <Empty>还没有站点上传效果结果。</Empty>}</section></div>;
+  return <div className="panel-stack"><EffectChart rows={rows} siteNames={siteNames} /><section className="table-wrap"><div className="section-head"><div><p className="eyebrow">每轮站点结果</p><h2>结果明细</h2></div><span>{rows.length} 条结果</span></div><table><thead><tr><th>轮次</th><th>站点</th><th>联邦前</th><th>联邦后</th><th>结果</th><th>样本数</th><th>上传时间</th></tr></thead><tbody>{rows.map((row) => { const change = row.baseline === null || row.candidate === null ? null : row.candidate - row.baseline; const result = change === null ? "等待联邦结果" : change > 0.0001 ? "提升" : change < -0.0001 ? "下降" : "持平"; return <tr key={row.key}><td className="mono">{row.roundId}</td><td><strong>{siteNames[row.siteId] || row.siteId}</strong><small className="mono">{row.siteId}</small></td><td>{percent(row.baseline)}</td><td>{percent(row.candidate)}</td><td><span className={`evaluation-result evaluation-result--${result === "提升" ? "up" : result === "下降" ? "down" : result === "持平" ? "same" : "waiting"}`}>{result}</span></td><td>{row.sampleSize ?? "—"}</td><td>{formatTime(row.createdAt)}</td></tr>; })}</tbody></table>{rows.length === 0 && <Empty>还没有站点上传效果结果。</Empty>}</section></div>;
 }
 
 function releaseLabel(release: ReleaseSummary) {

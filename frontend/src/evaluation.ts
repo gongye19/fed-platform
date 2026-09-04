@@ -7,6 +7,7 @@ export type EvaluationInput = {
 export type EvaluationRow = {
   key: string;
   roundId: string;
+  experimentId: string | null;
   siteId: string;
   baseline: number | null;
   candidate: number | null;
@@ -31,10 +32,14 @@ export function groupEvaluationResults(items: EvaluationInput[]) {
   const grouped = new Map<string, EvaluationRow>();
   for (const item of items) {
     const roundId = String(item.metadata.round_id || "—");
+    const explicitExperiment = typeof item.metadata.experiment_id === "string" ? item.metadata.experiment_id : null;
+    // ponytail: legacy demo rounds encode the experiment in "*-rN"; remove after all apps send experiment_id.
+    const inferredExperiment = roundId.match(/^(.*)-r\d+$/)?.[1] || null;
     const key = `${roundId}:${item.site_id}`;
     const row = grouped.get(key) || {
       key,
       roundId,
+      experimentId: explicitExperiment || inferredExperiment,
       siteId: item.site_id,
       baseline: null,
       candidate: null,
@@ -48,6 +53,13 @@ export function groupEvaluationResults(items: EvaluationInput[]) {
     grouped.set(key, row);
   }
   return Array.from(grouped.values());
+}
+
+export function latestEvaluationRows(rows: EvaluationRow[]) {
+  const grouped = rows.filter((row) => row.experimentId !== null);
+  if (grouped.length === 0) return rows;
+  const latest = grouped.reduce((current, row) => row.createdAt > current.createdAt ? row : current);
+  return rows.filter((row) => row.experimentId === latest.experimentId);
 }
 
 function weighted(rows: EvaluationRow[], field: "baseline" | "candidate") {

@@ -240,8 +240,8 @@ td small { margin-top: 4px; }
 .evaluation-result--down { color: var(--red); }
 .evaluation-result--same { color: var(--secondary); }
 .evaluation-result--waiting { color: var(--amber); }
-.evaluation-workbench { display: grid; gap: 16px; max-width: 1320px; margin: 0 auto; }
-.evaluation-workbench > .table-wrap { width: 100%; }
+.panel-stack { display: grid; gap: 16px; max-width: 1320px; margin: 0 auto; }
+.panel-stack > .table-wrap { width: 100%; }
 .effect-panel { min-width: 0; overflow: hidden; background: var(--surface-1); border: 1px solid var(--line); border-radius: var(--radius-md); }
 .effect-legend { display: flex; flex-wrap: wrap; gap: 10px 18px; padding: 14px 20px 0; color: var(--secondary); font-size: 11px; }
 .effect-legend span, .track-legend span { display: inline-flex; align-items: center; gap: 7px; }
