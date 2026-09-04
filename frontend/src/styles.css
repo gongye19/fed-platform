@@ -300,35 +300,33 @@ td small { margin-top: 4px; }
 .delivery-targets label { display: flex; align-items: center; gap: 8px; min-width: 0; cursor: pointer; font-size: 11px; }
 .delivery-targets input { flex: none; }
 .delivery-targets span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lineage-legend { display: flex; flex-wrap: wrap; gap: 16px 24px; padding: 12px 20px; color: var(--muted); border-bottom: 1px solid var(--line); font-size: 10px; }
-.lineage-legend span { display: inline-flex; align-items: center; gap: 7px; }
-.lineage-key { width: 8px; height: 8px; border: 1px solid var(--muted); border-radius: 2px; }
-.lineage-key--input { border-radius: 50%; }
-.lineage-key--version { background: var(--accent); border-color: var(--accent); }
-.lineage-key--target { transform: rotate(45deg); }
-.lineage-viewport { overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: x proximity; }
-.lineage-strip { position: relative; display: flex; gap: 14px; width: max-content; min-width: 100%; padding: 32px 20px 20px; }
-.lineage-strip::before { position: absolute; top: 41px; right: 20px; left: 20px; height: 1px; background: var(--line-strong); content: ""; }
-.lineage-card { position: relative; width: 310px; flex: none; overflow: hidden; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); scroll-snap-align: end; content-visibility: auto; contain-intrinsic-size: auto 310px; transition: border-color 150ms ease-out, transform 150ms ease-out; }
-.lineage-card.selected { border-color: rgba(123, 134, 235, .55); transform: translateY(-2px); }
-.lineage-card__head { position: relative; z-index: 1; display: grid; grid-template-columns: 12px 1fr auto; align-items: center; gap: 9px; width: 100%; min-height: 48px; padding: 9px 12px; color: var(--secondary); text-align: left; background: var(--surface-2); border: 0; border-bottom: 1px solid var(--line); cursor: pointer; }
-.lineage-card__head:hover { color: var(--ink); }
-.lineage-card__head strong { font: 600 12px/1 "Geist Mono Variable", monospace; }
-.lineage-card__head time { color: var(--muted); font: 9px/1 "Geist Mono Variable", monospace; }
-.lineage-card__point { width: 9px; height: 9px; background: var(--surface-2); border: 2px solid var(--muted); border-radius: 50%; }
-.lineage-card.selected .lineage-card__point { background: var(--accent); border-color: var(--accent-hover); box-shadow: 0 0 0 4px rgba(94, 106, 210, .15); }
-.lineage-flow { display: grid; justify-items: center; padding: 14px; }
-.lineage-group { width: 100%; min-height: 64px; }
-.lineage-group > small, .lineage-artifact small { display: block; margin-bottom: 7px; color: var(--muted); font: 9px/1 "Geist Mono Variable", monospace; }
-.lineage-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.lineage-chip { display: inline-grid; gap: 2px; max-width: 100%; padding: 6px 8px; overflow: hidden; color: var(--secondary); background: var(--surface-1); border: 1px solid var(--line); border-radius: 5px; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.lineage-chip b { color: var(--muted); font: 8px/1.2 "Geist Mono Variable", monospace; }
-.lineage-chip--current { border-color: rgba(81, 177, 133, .45); }
-.lineage-chip--failed { border-color: rgba(228, 119, 127, .45); }
-.lineage-empty { color: var(--muted); font-size: 10px; }
-.lineage-arrow { height: 24px; color: var(--muted); font: 12px/24px "Geist Mono Variable", monospace; }
-.lineage-artifact { width: 116px; padding: 10px; color: var(--ink); text-align: center; background: rgba(94, 106, 210, .12); border: 1px solid rgba(123, 134, 235, .34); border-radius: var(--radius-sm); }
-.lineage-artifact strong { font: 600 13px/1 "Geist Mono Variable", monospace; }
+.current-version-list { overflow-x: auto; overscroll-behavior-inline: contain; }
+.current-version-list__head, .current-version-list__row { display: grid; grid-template-columns: minmax(180px, 1.2fr) minmax(170px, .8fr) minmax(170px, .8fr); align-items: center; gap: 24px; min-width: 600px; padding: 0 20px; }
+.current-version-list__head { min-height: 38px; color: var(--muted); background: var(--surface-2); border-bottom: 1px solid var(--line); font: 9px/1 "Geist Mono Variable", monospace; letter-spacing: .04em; }
+.current-version-list__row { min-height: 58px; border-bottom: 1px solid var(--line); }
+.current-version-list__row:last-child { border-bottom: 0; }
+.current-version-list__row strong { overflow: hidden; font-size: 12px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+.current-version-list__row time { color: var(--muted); font: 10px/1 "Geist Mono Variable", monospace; }
+.release-code { width: max-content; padding: 5px 7px; color: var(--ink); background: rgba(94, 106, 210, .1); border: 1px solid rgba(123, 134, 235, .24); border-radius: 4px; font: 600 11px/1 "Geist Mono Variable", monospace; letter-spacing: .05em; }
+.version-table__scroll { overflow-x: auto; overscroll-behavior-inline: contain; }
+.version-table table { min-width: 1040px; }
+.version-table th:nth-child(1) { width: 130px; }
+.version-table th:nth-child(2) { width: 150px; }
+.version-table th:nth-child(3) { width: 265px; }
+.version-table th:nth-child(4) { width: 180px; }
+.version-table tbody tr { content-visibility: auto; contain-intrinsic-size: auto 94px; }
+.version-table tbody tr.selected { background: rgba(94, 106, 210, .055); }
+.version-table td { vertical-align: top; }
+.version-table time { color: var(--secondary); font: 10px/1.4 "Geist Mono Variable", monospace; }
+.release-select { display: grid; gap: 6px; padding: 0; color: var(--secondary); text-align: left; background: transparent; border: 0; cursor: pointer; }
+.release-select:hover code, .release-select[aria-pressed="true"] code { color: var(--ink); border-color: rgba(123, 134, 235, .5); }
+.release-select code { width: max-content; padding: 5px 7px; border: 1px solid var(--line-strong); border-radius: 4px; font: 600 11px/1 "Geist Mono Variable", monospace; letter-spacing: .05em; transition: color 150ms ease-out, border-color 150ms ease-out; }
+.release-select small { color: var(--muted); font-size: 9px; }
+.version-table__items { display: grid; gap: 8px; }
+.version-table__items > span, .version-method { display: grid; gap: 3px; }
+.version-table__items strong, .version-method strong { overflow: hidden; color: var(--secondary); font-size: 11px; font-weight: 540; text-overflow: ellipsis; white-space: nowrap; }
+.version-table__items small, .version-method small { color: var(--muted); font: 9px/1.2 "Geist Mono Variable", monospace; }
+.version-table__items em { color: var(--muted); font-size: 10px; font-style: normal; }
 
 .dialog { width: min(680px, calc(100vw - 28px)); max-height: calc(100dvh - 40px); padding: 0; overflow: auto; overscroll-behavior: contain; color: var(--ink); background: var(--surface-1); border: 1px solid var(--line-strong); border-radius: var(--radius-md); box-shadow: 0 24px 80px rgba(0, 0, 0, .55); }
 .dialog::backdrop { background: rgba(3, 4, 5, .72); backdrop-filter: blur(4px); }

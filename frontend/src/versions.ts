@@ -9,7 +9,10 @@ export function latestReleaseGroup<T extends { created_at: string; version_label
   return releases.filter((release) => release.created_at >= cutoff);
 }
 
-export function releaseLabels(releases: Array<{ release_id: string; release_number?: number; created_at: string }>) {
-  const fallback = new Map(releases.slice().sort((left, right) => left.created_at.localeCompare(right.created_at)).map((release, index) => [release.release_id, index + 1]));
-  return new Map(releases.map((release) => [release.release_id, `#${String(release.release_number || fallback.get(release.release_id)).padStart(4, "0")}`]));
+export function releaseCode(releaseId: string) {
+  return releaseId.replaceAll("-", "").slice(0, 8).toUpperCase();
+}
+
+export function releaseLabels(releases: Array<{ release_id: string }>) {
+  return new Map(releases.map((release) => [release.release_id, releaseCode(release.release_id)]));
 }

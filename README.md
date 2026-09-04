@@ -25,7 +25,7 @@
 - 联邦算法使用的受保护 Artifact 读取与聚合结果写回接口；
 - Submission、Event、AgentJob 同事务写入及幂等；
 - 不可变 Release、站点 Delivery、stage/activate/rollback Command 与 Ack；
-- Release 使用中性稳定编号，精确关联输入批次、实际下发目标与站点采用状态；
+- Release 使用不带顺序含义的稳定短编号，精确关联输入批次、实际下发目标与站点采用状态；
 - PostgreSQL `SKIP LOCKED` Agent Worker；
 - 新应用默认绑定 DeepSeek Harness Agent Core，配置与平台 memory 均带 revision；
 - Harness 使用无 shell、无文件系统、无 skill/job 工具的 Cordis 组合，只能返回受校验意图；

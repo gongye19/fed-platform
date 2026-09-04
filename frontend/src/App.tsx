@@ -1,6 +1,6 @@
 import { FormEvent, lazy, ReactNode, Suspense, useEffect, useRef, useState, type MouseEvent } from "react";
 import { buildEvaluationTrend, groupEvaluationResults, latestEvaluationRows, type EvaluationRow } from "./evaluation";
-import { latestReleaseGroup, releaseLabels } from "./versions";
+import { latestReleaseGroup, releaseCode, releaseLabels } from "./versions";
 
 const PlatformOverview = lazy(() => import("./PlatformOverview"));
 
@@ -52,7 +52,6 @@ type Submission = {
 };
 type ReleaseSummary = {
   release_id: string;
-  release_number: number;
   generation_job_id: string | null;
   created_at: string;
   artifact_digests: string[];
@@ -216,7 +215,7 @@ function resultLabel(result: string) {
 function Status({ value }: { value: string }) {
   const tone = ["failed", "disabled", "offline", "reject", "失败", "下降", "下发失败", "站点处理失败"].includes(value)
     ? "bad"
-    : ["pending", "running", "staged", "retry", "等待", "等待接收", "已接收，未采用", "尚未连接", "待分发", "已暂存", "未提交", "尚未提交", "等待新数据", "尚未上报"].includes(value)
+    : ["pending", "running", "staged", "retry", "等待", "等待接收", "已接收，未采用", "尚未连接", "待分发", "已暂存", "未提交", "尚未提交", "等待新数据", "尚未上报", "尚未采用"].includes(value)
       ? "waiting"
       : "ok";
   const label = ({ active: "运行中", disabled: "已停用", failed: "失败", idle: "空闲", offline: "离线", online: "在线", pending: "等待", retry: "重试中", running: "处理中", staged: "已暂存" } as Record<string, string>)[value] || value;
@@ -566,34 +565,32 @@ function deliveryLabel(delivery: Delivery) {
   return "已接收，未采用";
 }
 
-function FederationLineage({ releases, memberships, selectedId, onSelect }: {
+function CurrentSiteVersions({ memberships }: { memberships: Membership[] }) {
+  return <section className="version-panel current-versions"><div className="section-head"><div><p className="eyebrow">站点状态</p><h2>当前采用的联邦版本</h2></div><span>{memberships.length} 个站点</span></div>
+    {memberships.length === 0 ? <Empty>还没有站点接入这个应用。</Empty> : <div className="current-version-list">
+      <div className="current-version-list__head"><span>站点</span><span>当前联邦版本</span><span>最近确认</span></div>
+      {memberships.map((member) => <div className="current-version-list__row" key={member.site_id}><strong>{visibleName(member.display_name)}</strong><span>{member.reported_release_id ? <code className="release-code" title={member.reported_release_id} translate="no">{releaseCode(member.reported_release_id)}</code> : <Status value="尚未采用" />}</span><time>{formatTime(member.federation_version_reported_at, "尚未确认")}</time></div>)}
+    </div>}
+  </section>;
+}
+
+function FederationVersionTable({ releases, memberships, selectedId, onSelect }: {
   releases: ReleaseSummary[];
   memberships: Membership[];
   selectedId: string;
   onSelect: (releaseId: string) => void;
 }) {
-  const timelineRef = useRef<HTMLDivElement>(null);
-  const ordered = releases.slice().sort((left, right) => left.created_at.localeCompare(right.created_at));
   const labels = releaseLabels(releases);
   const siteNames = new Map(memberships.map((member) => [member.site_id, visibleName(member.display_name)]));
-  useEffect(() => {
-    const timeline = timelineRef.current;
-    if (timeline) timeline.scrollLeft = timeline.scrollWidth;
-  }, [releases.length]);
-  return <section className="version-panel lineage-panel"><div className="section-head"><div><p className="eyebrow">可追溯关系</p><h2>版本谱系与站点轨迹</h2></div><span>最新版本在右侧</span></div>
-    <div className="lineage-legend"><span><i className="lineage-key lineage-key--input" aria-hidden="true" />生成输入</span><span><i className="lineage-key lineage-key--version" aria-hidden="true" />联邦版本</span><span><i className="lineage-key lineage-key--target" aria-hidden="true" />实际下发与采用</span></div>
-    {ordered.length === 0 ? <Empty>还没有生成联邦版本。</Empty> : <div className="lineage-viewport" ref={timelineRef}><div className="lineage-strip">
-      {ordered.map((release) => <article className={release.release_id === selectedId ? "lineage-card selected" : "lineage-card"} key={release.release_id}>
-        <button type="button" className="lineage-card__head" aria-pressed={release.release_id === selectedId} onClick={() => onSelect(release.release_id)}><span className="lineage-card__point" aria-hidden="true" /><strong>{labels.get(release.release_id)}</strong><time>{formatTime(release.created_at)}</time></button>
-        <div className="lineage-flow">
-          <div className="lineage-group"><small>生成输入</small><div className="lineage-chips">{release.inputs?.length > 0 ? release.inputs.map((input) => <span className="lineage-chip lineage-chip--input" key={input.submission_id}>{siteNames.get(input.site_id) || input.site_id}<b>{batchLabel(input.submission_number)}</b></span>) : <span className="lineage-empty">历史输入未关联</span>}</div></div>
-          <span className="lineage-arrow" aria-hidden="true">↓</span>
-          <div className="lineage-artifact"><small>联邦版本</small><strong>{labels.get(release.release_id)}</strong></div>
-          <span className="lineage-arrow" aria-hidden="true">↓</span>
-          <div className="lineage-group"><small>实际下发</small><div className="lineage-chips">{release.deliveries?.length > 0 ? release.deliveries.map((delivery) => <span className={`lineage-chip lineage-chip--${delivery.state === "failed" ? "failed" : delivery.is_current ? "current" : "target"}`} key={delivery.delivery_id}>{siteNames.get(delivery.site_id) || delivery.site_id}<b>{deliveryLabel(delivery)}</b></span>) : <span className="lineage-empty">尚未下发</span>}</div></div>
-        </div>
-      </article>)}
-    </div></div>}
+  return <section className="version-panel version-table"><div className="section-head"><div><p className="eyebrow">版本记录</p><h2>所有联邦版本</h2></div><span>{releases.length} 个版本</span></div>
+    <div className="version-table__scroll"><table><thead><tr><th>版本编号</th><th>生成时间</th><th>使用的站点数据</th><th>生成方式</th><th>下发与采用</th></tr></thead><tbody>{releases.map((release) => <tr className={release.release_id === selectedId ? "selected" : ""} key={release.release_id}>
+      <td><button type="button" className="release-select" aria-pressed={release.release_id === selectedId} title={release.release_id} onClick={() => onSelect(release.release_id)}><code translate="no">{labels.get(release.release_id)}</code><small>{release.release_id === selectedId ? "已选择" : "选择"}</small></button></td>
+      <td><time>{formatTime(release.created_at)}</time></td>
+      <td><div className="version-table__items">{release.inputs?.length > 0 ? release.inputs.map((input) => <span key={input.submission_id}><strong>{siteNames.get(input.site_id) || input.site_id}</strong><small>{batchLabel(input.submission_number)}</small></span>) : <em>历史输入未关联</em>}</div></td>
+      <td><span className="version-method"><strong>{release.algorithm_id ? "应用联邦算法" : "平台导入"}</strong>{release.algorithm_id && <small>由联邦 Agent 执行</small>}</span></td>
+      <td><div className="version-table__items">{release.deliveries?.length > 0 ? release.deliveries.map((delivery) => <span key={delivery.delivery_id}><strong>{siteNames.get(delivery.site_id) || delivery.site_id}</strong><small>{deliveryLabel(delivery)}</small></span>) : <em>尚未下发</em>}</div></td>
+    </tr>)}</tbody></table></div>
+    {releases.length === 0 && <Empty>还没有生成联邦版本。</Empty>}
   </section>;
 }
 
@@ -684,6 +681,8 @@ function VersionManagement({ appId, federationId, topology, submissions, release
 
   return <div className="version-workbench">
     {message && <p className={`message message--${message.tone}`} role={message.tone === "error" ? "alert" : "status"}>{message.text}<button onClick={() => setMessage(null)} aria-label="关闭消息">×</button></p>}
+    <CurrentSiteVersions memberships={topology.memberships} />
+    <FederationVersionTable memberships={topology.memberships} releases={releases} selectedId={selectedId} onSelect={setSelectedId} />
     <div className="version-workbench__top">
       <section className="version-panel contribution-panel">
         <div className="section-head"><div><p className="eyebrow">生成输入</p><h2>选择站点上传批次</h2></div><span>已选 {selectedInputs.length} / {contributions.length}</span></div>
@@ -693,7 +692,7 @@ function VersionManagement({ appId, federationId, topology, submissions, release
       </section>
 
       <section className="version-panel distribution-panel">
-        <div className="section-head"><div><p className="eyebrow">下发控制</p><h2>{selected ? `联邦版本 ${labels.get(selected.release_id)}` : "选择联邦版本"}</h2></div><span>{selected ? `${selected.inputs?.length || 0} 个输入批次` : "暂无版本"}</span></div>
+        <div className="section-head"><div><p className="eyebrow">下发控制</p><h2>{selected ? `版本编号 ${labels.get(selected.release_id)}` : "选择联邦版本"}</h2></div><span>{selected ? `${selected.inputs?.length || 0} 个输入批次` : "暂无版本"}</span></div>
         {selected ? <>
           <div className="delivery-history"><h3>已下发站点</h3>{selected.deliveries?.length > 0 ? selected.deliveries.map((delivery) => <div key={delivery.delivery_id}><span><strong>{siteNames.get(delivery.site_id) || delivery.site_id}</strong><small>{formatTime(delivery.targeted_at)}</small></span><Status value={deliveryLabel(delivery)} /></div>) : <p>这个版本尚未下发。</p>}</div>
           {stageableSites.length > 0 && <fieldset className="delivery-targets"><legend>新增下发目标</legend>{stageableSites.map((siteId) => <label key={siteId}><input type="checkbox" name="delivery-site" value={siteId} checked={selectedSites.includes(siteId)} onChange={(event) => setSelectedSites((current) => event.target.checked ? [...current, siteId] : current.filter((item) => item !== siteId))} /><span>{siteNames.get(siteId) || siteId}</span></label>)}</fieldset>}
@@ -701,8 +700,6 @@ function VersionManagement({ appId, federationId, topology, submissions, release
         <div className="version-panel__action"><span>{selectedSites.length > 0 ? `将下发给 ${selectedSites.length} 个站点` : stageableSites.length > 0 ? "请选择下发目标" : "所有可用站点均已下发"}</span><button className="button" type="button" disabled={!selected || selectedSites.length === 0 || busy !== ""} onClick={distribute}>{busy === "distribute" ? "下发中…" : "下发所选版本"}</button></div>
       </section>
     </div>
-
-    <FederationLineage memberships={topology.memberships} releases={releases} selectedId={selectedId} onSelect={setSelectedId} />
   </div>;
 }
 

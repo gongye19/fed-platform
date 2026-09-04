@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { latestReleaseGroup, releaseLabels } from "../src/versions.ts";
+import { latestReleaseGroup, releaseCode, releaseLabels } from "../src/versions.ts";
 
-test("uses stable neutral release numbers instead of semantic versions", () => {
+test("uses stable opaque release codes without sequence semantics", () => {
+  assert.equal(releaseCode("b9d463cb-b9c1-42e2-8898-6c7fbea5cc5e"), "B9D463CB");
   assert.deepEqual(Array.from(releaseLabels([
-    { release_id: "new", release_number: 41, created_at: "2026-01-02T00:00:00Z" },
-    { release_id: "old", release_number: 7, created_at: "2026-01-01T00:00:00Z" },
-  ])), [["new", "#0041"], ["old", "#0007"]]);
+    { release_id: "b9d463cb-b9c1-42e2-8898-6c7fbea5cc5e" },
+    { release_id: "8c987757-0e98-49db-a015-67ee18b0555a" },
+  ])), [
+    ["b9d463cb-b9c1-42e2-8898-6c7fbea5cc5e", "B9D463CB"],
+    ["8c987757-0e98-49db-a015-67ee18b0555a", "8C987757"],
+  ]);
 });
 
 test("keeps only the latest federation experiment releases", () => {
