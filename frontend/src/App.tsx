@@ -325,19 +325,17 @@ function ApplicationsPage({ navigate }: { navigate: (path: string) => void }) {
   const visible = items.filter((item) => `${item.app_id} ${item.display_name}`.toLowerCase().includes(query.toLowerCase()));
   return (
     <>
-      <PageHeader eyebrow="Registry / Applications" title="应用" meta={`${items.length} 个已注册应用 · 每个应用拥有独立联邦 Agent`} action={<button className="button button--primary" onClick={() => setRegistering(true)}>注册应用</button>} />
+      <PageHeader eyebrow="Registry / Applications" title="应用" meta={`${items.length} 个已注册应用`} action={<button className="button button--primary" onClick={() => setRegistering(true)}>注册应用</button>} />
       <div className="toolbar">
-        <label className="search"><span className="sr-only">搜索应用</span><input type="search" placeholder="搜索 app_id 或名称" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
+        <label className="search"><span className="sr-only">搜索应用</span><input type="search" placeholder="搜索应用名称" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
         <button className="button button--quiet" onClick={load}>刷新</button>
       </div>
       {error && <ErrorMessage error={error} />}
       <section className="ledger" aria-busy={loading}>
-        <div className="ledger__head"><span>APPLICATION</span><span>AGENT</span><span>FEDERATIONS</span><span>SITES</span><span>STATE</span></div>
-        {!loading && visible.length === 0 ? <Empty>没有匹配的应用。注册第一个 FedApp Manifest 后，平台会同时创建它的 Agent。</Empty> : visible.map((item) => (
+        <div className="ledger__head"><span>APPLICATION</span><span>SITES</span><span>STATE</span></div>
+        {!loading && visible.length === 0 ? <Empty>没有匹配的应用。</Empty> : visible.map((item) => (
           <button className="ledger__row" key={item.app_id} onClick={() => navigate(`/apps/${encodeURIComponent(item.app_id)}/overview`)}>
-            <span><strong>{visibleName(item.display_name)}</strong><small className="mono">{item.app_id} · v{item.current_version}</small></span>
-            <span><Status value={item.agent_status} /></span>
-            <span className="ledger__number">{item.federation_count}</span>
+            <span><strong>{visibleName(item.display_name)}</strong><small>应用版本 {item.current_version}</small></span>
             <span className="ledger__number">{item.site_count}</span>
             <span><Status value={item.status} /></span>
           </button>
@@ -422,7 +420,7 @@ function ApplicationDetail({ appId, section, navigate }: { appId: string; sectio
   const currentFederationActivities = activities.filter((item) => !item.federation_id || item.federation_id === federationId);
   return <>
     <PageHeader eyebrow={`应用 / ${sectionLabel}`} title={visibleName(app.display_name)} meta={`应用版本 ${app.current_version}`} />
-    <div className="app-state"><Status value={app.status} /><span>Agent</span><Status value={app.agent_status} /></div>
+    <div className="app-state"><Status value={app.status} /></div>
     {error && <ErrorMessage error={error} />}
     <nav className="app-nav" aria-label={`${visibleName(app.display_name)} 导航`}>{APP_SECTIONS.map(([id, label]) => <button key={id} className={section === id ? "active" : ""} aria-current={section === id ? "page" : undefined} onClick={() => navigate(`${base}/${id}`)}>{label}</button>)}</nav>
     {section === "overview" && <div className="panel-stack"><ApplicationSites topology={topology} releases={currentFederationReleases} /></div>}
@@ -506,6 +504,15 @@ function trackNodeLabel(node: SiteTrackNode) {
   } as const)[node.kind];
 }
 
+function trackNodeShortLabel(node: SiteTrackNode) {
+  return ({
+    contribution: node.complete ? "已提交" : "未提交",
+    distribute: node.complete ? "已下发" : "未下发",
+    update: node.complete ? "已更新" : "未更新",
+    evaluation: node.complete ? "已返回" : "未返回",
+  } as const)[node.kind];
+}
+
 const trackGuide: Array<{ kind: SiteTrackNode["kind"]; label: string; description: string }> = [
   { kind: "contribution", label: "待联邦数据", description: "站点提交本轮输入" },
   { kind: "distribute", label: "联邦版本下发", description: "平台发送版本到站点" },
@@ -514,18 +521,20 @@ const trackGuide: Array<{ kind: SiteTrackNode["kind"]; label: string; descriptio
 ];
 
 function SiteOperationTracks({ memberships, releases, activities }: { memberships: Membership[]; releases: ReleaseSummary[]; activities: Activity[] }) {
+  const timelineRefs = useRef<Array<HTMLDivElement | null>>([]);
   const releaseNames = Object.fromEntries(releaseLabels(releases));
-  const orderedReleases = releases.slice().sort((left, right) => left.created_at.localeCompare(right.created_at));
   const currentReleases = Object.fromEntries(memberships.map((member) => [member.site_id, member.reported_release_id]));
   const tracks = buildSiteTracks(memberships.map((member) => member.site_id), activities, releases, currentReleases);
   const members = Object.fromEntries(memberships.map((member) => [member.site_id, member]));
+  useEffect(() => {
+    timelineRefs.current.forEach((timeline) => { if (timeline) timeline.scrollLeft = timeline.scrollWidth; });
+  }, [releases.length]);
   return <section className="version-panel track-panel"><div className="section-head"><div><p className="eyebrow">联邦过程</p><h2>站点运行轨迹</h2></div><span>实心已完成 · 空心未完成</span></div>
     <div className="track-guide">{trackGuide.map((item) => <div key={item.kind}><i className={`track-mark track-mark--${item.kind}`} /><span><strong>{item.label}</strong><small>{item.description}</small></span></div>)}</div>
-    {tracks.length === 0 ? <Empty>还没有站点接入这个应用。</Empty> : releases.length === 0 ? <Empty>还没有可追踪的联邦版本。</Empty> : <div className="site-tracks"><div className="site-track__columns"><span>站点状态</span><div className="site-track__release-headings">{orderedReleases.map((release) => <span key={release.release_id}>{releaseNames[release.release_id]}</span>)}</div></div>{tracks.map((track) => {
+    {tracks.length === 0 ? <Empty>还没有站点接入这个应用。</Empty> : releases.length === 0 ? <Empty>还没有可追踪的联邦版本。</Empty> : <div className="site-tracks"><div className="site-track__columns"><span>站点状态</span><span>时间线 · 最新状态在右侧</span></div>{tracks.map((track, trackIndex) => {
       const member = members[track.siteId];
       const current = member.reported_release_id ? releaseNames[member.reported_release_id] || "历史联邦版本" : "尚未上报使用版本";
-      const cycles = orderedReleases.map((release) => track.nodes.filter((node) => node.releaseId === release.release_id));
-      return <div className="site-track" key={track.siteId}><div className="site-track__site"><strong>{visibleName(member.display_name)}</strong><span>当前联邦版本：{current}</span><span>站点应用版本：{member.app_version || "尚未上报"}</span></div><div className="site-track__cycles">{cycles.map((cycle, cycleIndex) => <div className="site-track__cycle" key={orderedReleases[cycleIndex].release_id}>{cycle.map((node) => <span className="site-track__event" key={node.kind} title={trackNodeLabel(node)} role="img" aria-label={`${releaseNames[node.releaseId]}：${trackNodeLabel(node)}`}><i className={`track-mark track-mark--${node.kind}${node.complete ? "" : " track-mark--missing"}`} /></span>)}</div>)}</div></div>;
+      return <div className="site-track" key={track.siteId}><div className="site-track__site"><strong>{visibleName(member.display_name)}</strong><span>当前联邦版本：{current}</span><span>站点应用版本：{member.app_version || "尚未上报"}</span></div><div className="site-track__timeline" ref={(timeline) => { timelineRefs.current[trackIndex] = timeline; }}><div className="site-track__timeline-flow">{track.nodes.map((node, index) => <span className="site-track__event" key={`${node.releaseId}-${node.kind}-${index}`} title={trackNodeLabel(node)} role="img" aria-label={`${releaseNames[node.releaseId]}：${trackNodeLabel(node)}`}><i className={`track-mark track-mark--${node.kind}${node.complete ? "" : " track-mark--missing"}`} /><strong>{trackNodeShortLabel(node)}</strong><small>{releaseNames[node.releaseId]}</small></span>)}</div></div></div>;
     })}</div>}
   </section>;
 }

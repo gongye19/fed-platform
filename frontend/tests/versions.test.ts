@@ -6,7 +6,7 @@ test("numbers versions by creation order instead of exposing internal labels", (
   assert.deepEqual(Array.from(releaseLabels([
     { release_id: "new", created_at: "2026-01-02T00:00:00Z" },
     { release_id: "old", created_at: "2026-01-01T00:00:00Z" },
-  ])), [["old", "联邦版本 1"], ["new", "联邦版本 2"]]);
+  ])), [["old", "v1"], ["new", "v2"]]);
 });
 
 test("keeps only the latest federation experiment releases", () => {

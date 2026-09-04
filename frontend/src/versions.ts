@@ -17,7 +17,7 @@ export function latestReleaseGroup<T extends { created_at: string; version_label
 }
 
 export function releaseLabels(releases: Array<{ release_id: string; created_at: string }>) {
-  return new Map(releases.slice().sort((left, right) => left.created_at.localeCompare(right.created_at)).map((release, index) => [release.release_id, `联邦版本 ${index + 1}`]));
+  return new Map(releases.slice().sort((left, right) => left.created_at.localeCompare(right.created_at)).map((release, index) => [release.release_id, `v${index + 1}`]));
 }
 
 export function siteContributionRows(
