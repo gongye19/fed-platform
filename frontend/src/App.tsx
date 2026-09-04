@@ -1,7 +1,7 @@
 import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import PlatformOverview from "./PlatformOverview";
 import { buildEvaluationTrend, buildSiteTracks, groupEvaluationResults, latestEvaluationRows, type EvaluationRow, type SiteTrackNode } from "./evaluation";
-import { releaseLabels, siteContributionRows } from "./versions";
+import { latestReleaseGroup, releaseLabels, siteContributionRows } from "./versions";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
 
@@ -158,6 +158,10 @@ function shortId(value: string, length = 18) {
   return value.length > length ? `${value.slice(0, length)}…` : value;
 }
 
+function visibleName(value: string) {
+  return value.replace(/\bdemo\b/gi, "").replace(/^[\s_-]+|[\s_-]+$/g, "").replace(/\s{2,}/g, " ").trim() || "未命名";
+}
+
 function activityLabel(action: string) {
   return ({
     "submission.received": "收到站点贡献",
@@ -268,7 +272,7 @@ function Shell({ path, navigate }: {
               const base = `/apps/${encodeURIComponent(item.app_id)}`;
               return <div className="sidebar-app" key={item.app_id}>
                 <button className={selected ? "sidebar-app__name active" : "sidebar-app__name"} onClick={() => navigate(`${base}/overview`)}>
-                  <span>{item.display_name}</span><small>{item.current_version}</small>
+                  <span>{visibleName(item.display_name)}</span><small>{item.current_version}</small>
                 </button>
               </div>;
             })}
@@ -335,7 +339,7 @@ function ApplicationsPage({ navigate }: { navigate: (path: string) => void }) {
         <div className="ledger__head"><span>APPLICATION</span><span>AGENT</span><span>FEDERATIONS</span><span>SITES</span><span>STATE</span></div>
         {!loading && visible.length === 0 ? <Empty>没有匹配的应用。注册第一个 FedApp Manifest 后，平台会同时创建它的 Agent。</Empty> : visible.map((item) => (
           <button className="ledger__row" key={item.app_id} onClick={() => navigate(`/apps/${encodeURIComponent(item.app_id)}/overview`)}>
-            <span><strong>{item.display_name}</strong><small className="mono">{item.app_id} · v{item.current_version}</small></span>
+            <span><strong>{visibleName(item.display_name)}</strong><small className="mono">{item.app_id} · v{item.current_version}</small></span>
             <span><Status value={item.agent_status} /></span>
             <span className="ledger__number">{item.federation_count}</span>
             <span className="ledger__number">{item.site_count}</span>
@@ -418,26 +422,27 @@ function ApplicationDetail({ appId, section, navigate }: { appId: string; sectio
   const app = topology.application;
   const sectionLabel = APP_SECTIONS.find(([id]) => id === section)?.[1] || "概览";
   const base = `/apps/${encodeURIComponent(appId)}`;
+  const currentFederationReleases = latestReleaseGroup(releases);
   return <>
-    <PageHeader eyebrow={`应用 / ${sectionLabel}`} title={app.display_name} meta={`应用版本 ${app.current_version}`} />
+    <PageHeader eyebrow={`应用 / ${sectionLabel}`} title={visibleName(app.display_name)} meta={`应用版本 ${app.current_version}`} />
     <div className="app-state"><Status value={app.status} /><span>Agent</span><Status value={app.agent_status} /></div>
     {error && <ErrorMessage error={error} />}
-    <nav className="app-nav" aria-label={`${app.display_name} 导航`}>{APP_SECTIONS.map(([id, label]) => <button key={id} className={section === id ? "active" : ""} aria-current={section === id ? "page" : undefined} onClick={() => navigate(`${base}/${id}`)}>{label}</button>)}</nav>
-    {section === "overview" && <div className="panel-stack"><ApplicationSites topology={topology} /><SiteOperationTracks memberships={topology.memberships} releases={releases} activities={activities.filter((item) => !item.federation_id || item.federation_id === federationId)} /></div>}
+    <nav className="app-nav" aria-label={`${visibleName(app.display_name)} 导航`}>{APP_SECTIONS.map(([id, label]) => <button key={id} className={section === id ? "active" : ""} aria-current={section === id ? "page" : undefined} onClick={() => navigate(`${base}/${id}`)}>{label}</button>)}</nav>
+    {section === "overview" && <div className="panel-stack"><ApplicationSites topology={topology} /><SiteOperationTracks memberships={topology.memberships} releases={currentFederationReleases} activities={activities.filter((item) => !item.federation_id || item.federation_id === federationId)} /></div>}
     {section === "evaluations" && <Evaluations items={evaluations} memberships={topology.memberships} />}
-    {section === "versions" && <VersionManagement appId={appId} federationId={federationId} topology={topology} submissions={submissions} releases={releases} onRefresh={async () => { await Promise.all([loadTopology(), loadChannel()]); }} />}
-    {section === "timeline" && <ActivityTimeline items={activities} memberships={topology.memberships} releases={releases} />}
-    {section === "logs" && <ActivityLog items={activities} memberships={topology.memberships} releases={releases} />}
+    {section === "versions" && <VersionManagement appId={appId} federationId={federationId} topology={topology} submissions={submissions} releases={currentFederationReleases} onRefresh={async () => { await Promise.all([loadTopology(), loadChannel()]); }} />}
+    {section === "timeline" && <ActivityTimeline items={activities} memberships={topology.memberships} releases={currentFederationReleases} />}
+    {section === "logs" && <ActivityLog items={activities} memberships={topology.memberships} releases={currentFederationReleases} />}
   </>;
 }
 
 function ApplicationSites({ topology }: { topology: Topology }) {
-  return <section className="table-wrap"><div className="section-head"><div><p className="eyebrow">已接入应用</p><h2>站点</h2></div><span>{topology.memberships.length} 个站点</span></div><table><thead><tr><th>站点</th><th>应用版本</th><th>连接状态</th><th>最后上传</th></tr></thead><tbody>{topology.memberships.map((member) => <tr key={member.site_id}><td><strong>{member.display_name}</strong></td><td>{member.app_version || "尚未上报"}</td><td><Status value={member.last_seen_at ? "已连接" : "尚未连接"} /></td><td>{formatTime(member.last_seen_at)}</td></tr>)}</tbody></table>{topology.memberships.length === 0 && <Empty>站点首次使用应用专属 API Key 上传成功后，会自动显示在这里。</Empty>}</section>;
+  return <section className="table-wrap"><div className="section-head"><div><p className="eyebrow">已接入应用</p><h2>站点</h2></div><span>{topology.memberships.length} 个站点</span></div><table><thead><tr><th>站点</th><th>站点应用版本</th><th>连接状态</th><th>最后上传</th></tr></thead><tbody>{topology.memberships.map((member) => <tr key={member.site_id}><td><strong>{visibleName(member.display_name)}</strong></td><td>{member.app_version || "尚未上报"}</td><td><Status value={member.last_seen_at ? "已连接" : "尚未连接"} /></td><td>{formatTime(member.last_seen_at)}</td></tr>)}</tbody></table>{topology.memberships.length === 0 && <Empty>站点首次使用应用专属 API Key 上传成功后，会自动显示在这里。</Empty>}</section>;
 }
 
 function activityNames(memberships: Membership[], releases: ReleaseSummary[]) {
   return {
-    sites: new Map(memberships.map((member) => [member.site_id, member.display_name])),
+    sites: new Map(memberships.map((member) => [member.site_id, visibleName(member.display_name)])),
     releases: releaseLabels(releases),
   };
 }
@@ -496,9 +501,10 @@ function EffectChart({ rows, siteNames }: { rows: EvaluationRow[]; siteNames: Re
 
 function trackNodeLabel(node: SiteTrackNode) {
   return ({
-    upload: node.complete ? "已上传数据" : "未上传数据",
-    distribute: node.complete ? "已下发版本" : "未下发版本",
-    update: node.complete ? "已更新版本" : "未更新版本",
+    contribution: node.complete ? "已上传待联邦数据" : "未上传待联邦数据",
+    distribute: node.complete ? "已下发联邦版本" : "未下发联邦版本",
+    update: node.complete ? "已更新联邦版本" : "未更新联邦版本",
+    evaluation: node.complete ? "已返回测试结果" : "未返回测试结果",
   } as const)[node.kind];
 }
 
@@ -511,9 +517,9 @@ function SiteOperationTracks({ memberships, releases, activities }: { membership
     {tracks.length === 0 ? <Empty>还没有站点接入这个应用。</Empty> : <div className="site-tracks">{tracks.map((track) => {
       const member = members[track.siteId];
       const current = member.reported_release_id ? releaseNames[member.reported_release_id] || shortId(member.reported_release_id, 10) : "尚未上报使用版本";
-      return <div className="site-track" key={track.siteId}><div className="site-track__site"><strong>{member.display_name}</strong><span>当前：{current}</span></div><div className="site-track__events">{track.nodes.length === 0 ? <span className="site-track__empty">还没有可追踪的联邦版本</span> : track.nodes.map((node, index) => {
-        const version = node.releaseId ? releaseNames[node.releaseId] || shortId(node.releaseId, 9) : null;
-        return <div className={`site-track__event${node.complete ? "" : " site-track__event--missing"}`} key={`${node.kind}-${node.releaseId}-${index}`} title={`${trackNodeLabel(node)}${version ? ` · ${version}` : ""}`}><i className={`track-mark track-mark--${node.kind}${node.complete ? "" : " track-mark--missing"}`} /><strong>{trackNodeLabel(node)}</strong><small>{version || (index === 0 ? "联邦前" : "下一轮数据")}</small></div>;
+      return <div className="site-track" key={track.siteId}><div className="site-track__site"><strong>{visibleName(member.display_name)}</strong><span>当前联邦版本：{current}</span></div><div className="site-track__events">{track.nodes.length === 0 ? <span className="site-track__empty">还没有可追踪的联邦版本</span> : track.nodes.map((node, index) => {
+        const version = releaseNames[node.releaseId] || "联邦版本";
+        return <div className={`site-track__event${node.complete ? "" : " site-track__event--missing"}`} key={`${node.kind}-${node.releaseId}-${index}`} title={`${trackNodeLabel(node)} · ${version}`}><i className={`track-mark track-mark--${node.kind}${node.complete ? "" : " track-mark--missing"}`} /><strong>{trackNodeLabel(node)}</strong><small>{version}</small></div>;
       })}</div></div>;
     })}</div>}
   </section>;
@@ -522,7 +528,7 @@ function SiteOperationTracks({ memberships, releases, activities }: { membership
 function Evaluations({ items, memberships }: { items: Submission[]; memberships: Membership[] }) {
   const percent = (value: unknown) => typeof value === "number" ? `${(value * 100).toFixed(1)}%` : "—";
   const rows = latestEvaluationRows(groupEvaluationResults(items));
-  const siteNames = Object.fromEntries(memberships.map((member) => [member.site_id, member.display_name]));
+  const siteNames = Object.fromEntries(memberships.map((member) => [member.site_id, visibleName(member.display_name)]));
   const rounds = new Map(buildEvaluationTrend(rows).rounds.map((round, index) => [round.roundId, `第 ${index + 1} 轮`]));
   return <div className="panel-stack"><EffectChart rows={rows} siteNames={siteNames} /><section className="table-wrap"><div className="section-head"><div><p className="eyebrow">每轮站点结果</p><h2>结果明细</h2></div><span>{rows.length} 条结果</span></div><table><thead><tr><th>轮次</th><th>站点</th><th>联邦前</th><th>联邦后</th><th>结果</th><th>上传时间</th></tr></thead><tbody>{rows.map((row) => { const change = row.baseline === null || row.candidate === null ? null : row.candidate - row.baseline; const result = change === null ? "等待联邦结果" : change > 0.0001 ? "提升" : change < -0.0001 ? "下降" : "持平"; return <tr key={row.key}><td>{rounds.get(row.roundId) || "本轮"}</td><td><strong>{siteNames[row.siteId] || "站点"}</strong></td><td>{percent(row.baseline)}</td><td>{percent(row.candidate)}</td><td><span className={`evaluation-result evaluation-result--${result === "提升" ? "up" : result === "下降" ? "down" : result === "持平" ? "same" : "waiting"}`}>{result}</span></td><td>{formatTime(row.createdAt)}</td></tr>; })}</tbody></table>{rows.length === 0 && <Empty>还没有站点上传效果结果。</Empty>}</section></div>;
 }
@@ -615,13 +621,13 @@ function VersionManagement({ appId, federationId, topology, submissions, release
     <div className="version-workbench__top">
       <section className="version-panel contribution-panel">
         <div className="section-head"><div><p className="eyebrow">本轮输入</p><h2>站点提交</h2></div><span>{newCount} / {contributionRows.length} 有新提交</span></div>
-        <div className="contribution-list">{contributionRows.map((row) => <div key={row.site_id}><span><strong>{row.display_name}</strong></span><span><Status value={row.state === "new" ? "有新提交" : row.state === "included" ? "已纳入版本" : "未提交"} /><time>{row.submission ? formatTime(row.submission.created_at) : "—"}</time></span></div>)}</div>
+        <div className="contribution-list">{contributionRows.map((row) => <div key={row.site_id}><span><strong>{visibleName(row.display_name)}</strong></span><span><Status value={row.state === "new" ? "有新提交" : row.state === "included" ? "已纳入版本" : "未提交"} /><time>{row.submission ? formatTime(row.submission.created_at) : "—"}</time></span></div>)}</div>
         {contributionRows.length === 0 && <Empty>还没有站点接入这个应用。</Empty>}
         <div className="version-panel__action"><span>{allReady ? "所有站点已提交，可以生成下一版。" : "等待所有站点提交本轮内容。"}</span><button className="button button--primary" type="button" disabled={!allReady || busy !== ""} onClick={generate}>{busy === "generate" ? "生成中…" : "联邦生成"}</button></div>
       </section>
 
       <section className="version-panel version-library">
-        <div className="section-head"><div><p className="eyebrow">可下发</p><h2>版本库</h2></div><span>{releases.length} 个版本</span></div>
+        <div className="section-head"><div><p className="eyebrow">可下发</p><h2>联邦版本库</h2></div><span>{releases.length} 个联邦版本</span></div>
         <div className="version-options" role="listbox" aria-label="选择下发版本">{releases.map((release) => <button key={release.release_id} type="button" role="option" className={release.release_id === selectedId ? "version-option selected" : "version-option"} aria-selected={release.release_id === selectedId} onClick={() => setSelectedId(release.release_id)}><span className="version-option__radio" aria-hidden="true" /><span><strong>{labels.get(release.release_id)}</strong><small>{formatTime(release.created_at)}</small></span><span className="version-option__delivery">{release.pending > 0 ? `${release.pending} 待下发` : `${release.delivery_count} 已下发`}</span></button>)}</div>
         {releases.length === 0 && <Empty>还没有生成联邦版本。</Empty>}
         <div className="version-panel__action"><span>{selected ? `已选择 ${labels.get(selected.release_id) || "联邦版本"}` : "先选择一个版本"}</span><button className="button" type="button" disabled={!selected || !detail || stageableSites.length === 0 || busy !== ""} onClick={distribute}>{busy === "distribute" ? "下发中…" : stageableSites.length > 0 ? `下发至 ${stageableSites.length} 个站点` : "已全部下发"}</button></div>
@@ -629,8 +635,8 @@ function VersionManagement({ appId, federationId, topology, submissions, release
     </div>
 
     <section className="version-panel site-version-panel">
-      <div className="section-head"><div><p className="eyebrow">站点上报</p><h2>当前使用版本</h2></div><span>下发不等于启用</span></div>
-      <table><thead><tr><th>站点</th><th>当前使用版本</th><th>应用版本</th><th>上报时间</th></tr></thead><tbody>{topology.memberships.map((member) => <tr key={member.site_id}><td><strong>{member.display_name}</strong></td><td>{member.reported_release_id ? <><strong>{labels.get(member.reported_release_id) || "历史版本"}</strong><small><Status value="使用中" /></small></> : <Status value="尚未上报" />}</td><td>{member.app_version || "—"}</td><td>{formatTime(member.federation_version_reported_at, "尚未上报")}</td></tr>)}</tbody></table>
+      <div className="section-head"><div><p className="eyebrow">站点上报</p><h2>站点版本状态</h2></div><span>下发不等于启用</span></div>
+      <table><thead><tr><th>站点</th><th>当前联邦版本</th><th>站点应用版本</th><th>上报时间</th></tr></thead><tbody>{topology.memberships.map((member) => <tr key={member.site_id}><td><strong>{visibleName(member.display_name)}</strong></td><td>{member.reported_release_id ? <><strong>{labels.get(member.reported_release_id) || "历史联邦版本"}</strong><small><Status value="使用中" /></small></> : <Status value="尚未上报" />}</td><td>{member.app_version || "—"}</td><td>{formatTime(member.federation_version_reported_at, "尚未上报")}</td></tr>)}</tbody></table>
       {topology.memberships.length === 0 && <Empty>站点上传后，这里会显示它实际使用的版本。</Empty>}
     </section>
   </div>;

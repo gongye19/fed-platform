@@ -41,18 +41,18 @@ test("builds site trends in chronological round order", () => {
 
 test("builds complete and incomplete checkpoints for each release cycle", () => {
   const tracks = buildSiteTracks(["site-a"], [
-    { created_at: "2026-01-01T00:00:00Z", action: "submission.accepted", site_id: "site-a", target_id: "submission-1" },
+    { created_at: "2026-01-01T00:00:00Z", action: "submission.accepted", site_id: "site-a", target_id: "submission-1", detail: { artifact_metadata: { round_id: "trial-r1" } } },
     { created_at: "2026-01-02T01:00:00Z", action: "release.stage.requested", site_id: null, target_id: "release-1", detail: { site_ids: ["site-a"] } },
     { created_at: "2026-01-02T02:00:00Z", action: "site.version.reported", site_id: "site-a", target_id: "release-1", detail: { reported_release_id: "release-1" } },
-    { created_at: "2026-01-03T00:00:00Z", action: "submission.accepted", site_id: "site-a", target_id: "submission-2" },
+    { created_at: "2026-01-02T03:00:00Z", action: "evaluation.received", site_id: "site-a", target_id: "evaluation-1", detail: { artifact_metadata: { candidate_release_id: "release-1" } } },
+    { created_at: "2026-01-03T00:00:00Z", action: "submission.accepted", site_id: "site-a", target_id: "submission-2", detail: { artifact_metadata: { round_id: "trial-r2" } } },
     { created_at: "2026-01-04T01:00:00Z", action: "release.stage.requested", site_id: null, target_id: "release-2", detail: { site_ids: ["site-a"] } },
-    { created_at: "2026-01-04T02:00:00Z", action: "site.version.reported", site_id: "site-a", target_id: "release-2", detail: { reported_release_id: "release-2" } },
     { created_at: "2026-01-05T00:00:00Z", action: "site.version.reported", site_id: "site-a", target_id: "release-1", detail: { reported_release_id: "release-1" } },
   ], [
-    { release_id: "release-1", created_at: "2026-01-02T00:00:00Z" },
-    { release_id: "release-2", created_at: "2026-01-04T00:00:00Z" },
+    { release_id: "release-1", created_at: "2026-01-02T00:00:00Z", version_label: "trial-r1" },
+    { release_id: "release-2", created_at: "2026-01-04T00:00:00Z", version_label: "trial-r2" },
   ], { "site-a": "release-1" });
 
-  assert.deepEqual(tracks[0].nodes.map((node) => node.kind), ["upload", "distribute", "update", "upload", "distribute", "update", "upload"]);
-  assert.deepEqual(tracks[0].nodes.map((node) => node.complete), [true, true, true, true, true, false, false]);
+  assert.deepEqual(tracks[0].nodes.map((node) => node.kind), ["contribution", "distribute", "update", "evaluation", "contribution", "distribute", "update", "evaluation"]);
+  assert.deepEqual(tracks[0].nodes.map((node) => node.complete), [true, true, true, true, true, true, false, false]);
 });

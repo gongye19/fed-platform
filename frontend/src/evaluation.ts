@@ -21,9 +21,9 @@ export type EvaluationTrend = {
 };
 
 export type SiteTrackNode = {
-  kind: "upload" | "distribute" | "update";
+  kind: "contribution" | "distribute" | "update" | "evaluation";
   complete: boolean;
-  releaseId: string | null;
+  releaseId: string;
 };
 
 export function groupEvaluationResults(items: EvaluationInput[]) {
@@ -31,7 +31,7 @@ export function groupEvaluationResults(items: EvaluationInput[]) {
   for (const item of items) {
     const roundId = String(item.metadata.round_id || "—");
     const explicitExperiment = typeof item.metadata.experiment_id === "string" ? item.metadata.experiment_id : null;
-    // ponytail: legacy demo rounds encode the experiment in "*-rN"; remove after all apps send experiment_id.
+    // ponytail: legacy rounds encode the experiment in "*-rN"; remove after all apps send experiment_id.
     const inferredExperiment = roundId.match(/^(.*)-r\d+$/)?.[1] || null;
     const key = `${roundId}:${item.site_id}`;
     const row = grouped.get(key) || {
@@ -96,28 +96,26 @@ type ActivityInput = {
 export function buildSiteTracks(
   siteIds: string[],
   activities: ActivityInput[],
-  releases: Array<{ release_id: string; created_at: string }>,
+  releases: Array<{ release_id: string; created_at: string; version_label?: string | null }>,
   currentReleases: Record<string, string | null>,
 ) {
   const ordered = releases.slice().sort((left, right) => left.created_at.localeCompare(right.created_at));
-  const visible = ordered.slice(-3);
-  const isUpload = (activity: ActivityInput) => activity.action === "submission.accepted" || activity.action === "evaluation.received";
   const inWindow = (activity: ActivityInput, after: string | null, before: string | null) => (
     (!after || activity.created_at > after) && (!before || activity.created_at < before)
   );
+  const metadataValue = (activity: ActivityInput, key: string) => {
+    const metadata = activity.detail?.artifact_metadata;
+    return metadata && typeof metadata === "object" ? (metadata as Record<string, unknown>)[key] : undefined;
+  };
 
   return siteIds.map((siteId) => {
-    if (visible.length === 0) return { siteId, nodes: [] as SiteTrackNode[] };
+    if (ordered.length === 0) return { siteId, nodes: [] as SiteTrackNode[] };
     const siteActivity = activities.filter((activity) => activity.site_id === siteId);
-    const firstIndex = ordered.findIndex((release) => release.release_id === visible[0].release_id);
-    const nodes: SiteTrackNode[] = [{
-      kind: "upload",
-      complete: siteActivity.some((activity) => isUpload(activity) && inWindow(activity, ordered[firstIndex - 1]?.created_at || null, visible[0].created_at)),
-      releaseId: null,
-    }];
+    const nodes: SiteTrackNode[] = [];
 
-    for (const release of visible) {
+    for (const release of ordered) {
       const index = ordered.findIndex((item) => item.release_id === release.release_id);
+      const previousAt = ordered[index - 1]?.created_at || null;
       const nextAt = ordered[index + 1]?.created_at || null;
       const distribution = activities.some((activity) => activity.action === "release.stage.requested" && activity.target_id === release.release_id && Array.isArray(activity.detail?.site_ids) && activity.detail.site_ids.includes(siteId));
       const reports = siteActivity
@@ -127,9 +125,10 @@ export function buildSiteTracks(
         ? (nextAt ? null : currentReleases[siteId])
         : typeof reports[0].detail?.reported_release_id === "string" ? reports[0].detail.reported_release_id : reports[0].target_id === "none" ? null : reports[0].target_id;
       nodes.push(
+        { kind: "contribution", complete: siteActivity.some((activity) => activity.action === "submission.accepted" && (release.version_label ? metadataValue(activity, "round_id") === release.version_label : inWindow(activity, previousAt, release.created_at))), releaseId: release.release_id },
         { kind: "distribute", complete: distribution, releaseId: release.release_id },
         { kind: "update", complete: reportedRelease === release.release_id, releaseId: release.release_id },
-        { kind: "upload", complete: siteActivity.some((activity) => isUpload(activity) && inWindow(activity, release.created_at, nextAt)), releaseId: null },
+        { kind: "evaluation", complete: siteActivity.some((activity) => activity.action === "evaluation.received" && metadataValue(activity, "candidate_release_id") === release.release_id), releaseId: release.release_id },
       );
     }
     return { siteId, nodes };

@@ -1,12 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { releaseLabels, siteContributionRows } from "../src/versions.ts";
+import { latestReleaseGroup, releaseLabels, siteContributionRows } from "../src/versions.ts";
 
 test("numbers versions by creation order instead of exposing internal labels", () => {
   assert.deepEqual(Array.from(releaseLabels([
     { release_id: "new", created_at: "2026-01-02T00:00:00Z" },
     { release_id: "old", created_at: "2026-01-01T00:00:00Z" },
-  ])), [["old", "版本 1"], ["new", "版本 2"]]);
+  ])), [["old", "联邦版本 1"], ["new", "联邦版本 2"]]);
+});
+
+test("keeps only the latest federation experiment releases", () => {
+  const releases = [
+    { release_id: "current-3", created_at: "2026-01-06T00:00:00Z", version_label: "current-r3" },
+    { release_id: "current-2", created_at: "2026-01-05T00:00:00Z", version_label: "current-r2" },
+    { release_id: "current-1", created_at: "2026-01-04T00:00:00Z", version_label: "current-r1" },
+    { release_id: "old-2", created_at: "2026-01-02T00:00:00Z", version_label: "old-r2" },
+    { release_id: "old-1", created_at: "2026-01-01T00:00:00Z", version_label: "old-r1" },
+  ];
+
+  assert.deepEqual(latestReleaseGroup(releases).map((release) => release.release_id), ["current-3", "current-2", "current-1"]);
 });
 
 test("shows the latest contribution from every site against the latest version", () => {
