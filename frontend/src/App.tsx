@@ -1,6 +1,6 @@
 import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import PlatformOverview from "./PlatformOverview";
-import { buildEvaluationTrend, buildSiteTracks, groupEvaluationResults, latestEvaluationRows, type EvaluationRow, type SiteTrackEvent } from "./evaluation";
+import { buildEvaluationTrend, buildSiteTracks, groupEvaluationResults, latestEvaluationRows, type EvaluationRow, type SiteTrackNode } from "./evaluation";
 import { siteContributionRows } from "./versions";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
@@ -463,14 +463,14 @@ function EffectChart({ rows, siteNames }: { rows: EvaluationRow[]; siteNames: Re
   const plotWidth = width - bounds.left - bounds.right;
   const plotHeight = height - bounds.top - bounds.bottom;
   const x = (index: number) => bounds.left + (labels.length === 1 ? 0 : plotWidth * index / (labels.length - 1));
-  const y = (value: number) => bounds.top + (1 - value) * plotHeight;
+  const y = (value: number) => bounds.top + (1 - value) * plotHeight / .5;
   const siteSeries = trend.siteIds.map((siteId, index) => ({ siteId, values: trend.valuesBySite[siteId], color: chartColors[index % chartColors.length] }));
 
   return <section className="effect-panel"><div className="section-head"><div><p className="eyebrow">各站点与总体</p><h2>效果趋势</h2></div><span>总体按样本数加权</span></div>
     {rows.length === 0 ? <Empty>还没有站点上传效果结果。</Empty> : <>
       <div className="effect-legend"><span><i className="effect-legend__line effect-legend__line--total" />总体</span>{siteSeries.map((series) => <span key={series.siteId}><i className="effect-legend__line" style={{ background: series.color }} />{siteNames[series.siteId] || series.siteId}</span>)}</div>
       <div className="effect-chart__scroll"><svg className="effect-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="各站点与总体效果随联邦轮次的变化折线图">
-        {[0, .25, .5, .75, 1].map((tick) => <g key={tick}><line className="effect-chart__grid" x1={bounds.left} y1={y(tick)} x2={width - bounds.right} y2={y(tick)} /><text className="effect-chart__axis" x={bounds.left - 10} y={y(tick) + 4} textAnchor="end">{tick * 100}%</text></g>)}
+        {[.5, .6, .7, .8, .9, 1].map((tick) => <g key={tick}><line className="effect-chart__grid" x1={bounds.left} y1={y(tick)} x2={width - bounds.right} y2={y(tick)} /><text className="effect-chart__axis" x={bounds.left - 10} y={y(tick) + 4} textAnchor="end">{tick * 100}%</text></g>)}
         {labels.map((label, index) => labels.length <= 10 || index === labels.length - 1 || index % Math.ceil(labels.length / 8) === 0 ? <text className="effect-chart__axis" key={label} x={x(index)} y={height - 16} textAnchor="middle"><title>{index === 0 ? label : trend.rounds[index - 1].roundId}</title>{label}</text> : null)}
         {siteSeries.map((series) => <g key={series.siteId}><path className="effect-chart__site-line" d={chartPath(series.values, x, y)} stroke={series.color} />{series.values.map((value, index) => value === null ? null : <circle key={index} className="effect-chart__point" cx={x(index)} cy={y(value)} r="3.5" fill={series.color}><title>{`${siteNames[series.siteId] || series.siteId} · ${labels[index]} · ${(value * 100).toFixed(1)}%`}</title></circle>)}</g>)}
         <path className="effect-chart__total-line" d={chartPath(trend.totals, x, y)} />
@@ -480,22 +480,26 @@ function EffectChart({ rows, siteNames }: { rows: EvaluationRow[]; siteNames: Re
   </section>;
 }
 
-function trackEventLabel(event: SiteTrackEvent) {
-  return ({ upload: "上传数据", distribute: "下发版本", adopt: "开始使用", rollback: "回退版本" } as const)[event.kind];
+function trackNodeLabel(node: SiteTrackNode) {
+  return ({
+    upload: node.complete ? "已上传数据" : "未上传数据",
+    distribute: node.complete ? "已下发版本" : "未下发版本",
+    update: node.complete ? "已更新版本" : "未更新版本",
+  } as const)[node.kind];
 }
 
 function SiteOperationTracks({ memberships, releases, activities }: { memberships: Membership[]; releases: ReleaseSummary[]; activities: Activity[] }) {
   const releaseNames = Object.fromEntries(releases.map((release) => [release.release_id, releaseLabel(release)]));
-  const releaseDates = Object.fromEntries(releases.map((release) => [release.release_id, release.created_at]));
-  const tracks = buildSiteTracks(memberships.map((member) => member.site_id), activities, releaseDates);
+  const currentReleases = Object.fromEntries(memberships.map((member) => [member.site_id, member.reported_release_id]));
+  const tracks = buildSiteTracks(memberships.map((member) => member.site_id), activities, releases, currentReleases);
   const members = Object.fromEntries(memberships.map((member) => [member.site_id, member]));
-  return <section className="effect-panel"><div className="section-head"><div><p className="eyebrow">上传与版本状态</p><h2>站点运行轨迹</h2></div><div className="track-legend"><span><i className="track-mark track-mark--upload" />上传</span><span><i className="track-mark track-mark--distribute" />下发</span><span><i className="track-mark track-mark--adopt" />使用</span><span><i className="track-mark track-mark--rollback" />回退</span></div></div>
+  return <section className="effect-panel"><div className="section-head"><div><p className="eyebrow">上传与版本状态</p><h2>站点运行轨迹</h2></div><div className="track-legend"><span><i className="track-mark track-mark--complete" />已完成</span><span><i className="track-mark track-mark--missing" />未完成</span></div></div>
     {tracks.length === 0 ? <Empty>还没有站点接入这个应用。</Empty> : <div className="site-tracks">{tracks.map((track) => {
       const member = members[track.siteId];
       const current = member.reported_release_id ? releaseNames[member.reported_release_id] || shortId(member.reported_release_id, 10) : "尚未上报使用版本";
-      return <div className="site-track" key={track.siteId}><div className="site-track__site"><strong>{member.display_name}</strong><small className="mono">{track.siteId}</small><span>当前：{current}</span></div><div className="site-track__events">{track.events.length === 0 ? <span className="site-track__empty">暂无运行记录</span> : track.events.map((event, index) => {
-        const version = event.releaseId ? releaseNames[event.releaseId] || shortId(event.releaseId, 9) : null;
-        return <div className="site-track__event" key={`${event.at}-${index}`} title={`${trackEventLabel(event)}${version ? ` · ${version}` : ""} · ${formatTime(event.at)}`}><i className={`track-mark track-mark--${event.kind}`} /><strong>{trackEventLabel(event)}</strong><small>{version || formatTime(event.at)}</small></div>;
+      return <div className="site-track" key={track.siteId}><div className="site-track__site"><strong>{member.display_name}</strong><small className="mono">{track.siteId}</small><span>当前：{current}</span></div><div className="site-track__events">{track.nodes.length === 0 ? <span className="site-track__empty">还没有可追踪的联邦版本</span> : track.nodes.map((node, index) => {
+        const version = node.releaseId ? releaseNames[node.releaseId] || shortId(node.releaseId, 9) : null;
+        return <div className={`site-track__event${node.complete ? "" : " site-track__event--missing"}`} key={`${node.kind}-${node.releaseId}-${index}`} title={`${trackNodeLabel(node)}${version ? ` · ${version}` : ""}`}><i className={`track-mark track-mark--${node.kind}${node.complete ? "" : " track-mark--missing"}`} /><strong>{trackNodeLabel(node)}</strong><small>{version || (index === 0 ? "联邦前" : "下一轮数据")}</small></div>;
       })}</div></div>;
     })}</div>}
   </section>;

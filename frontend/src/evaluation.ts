@@ -22,9 +22,9 @@ export type EvaluationTrend = {
   totals: Array<number | null>;
 };
 
-export type SiteTrackEvent = {
-  at: string;
-  kind: "upload" | "distribute" | "adopt" | "rollback";
+export type SiteTrackNode = {
+  kind: "upload" | "distribute" | "update";
+  complete: boolean;
   releaseId: string | null;
 };
 
@@ -112,30 +112,42 @@ type ActivityInput = {
 export function buildSiteTracks(
   siteIds: string[],
   activities: ActivityInput[],
-  releaseDates: Record<string, string>,
+  releases: Array<{ release_id: string; created_at: string }>,
+  currentReleases: Record<string, string | null>,
 ) {
-  const tracks = Object.fromEntries(siteIds.map((siteId) => [siteId, [] as SiteTrackEvent[]]));
-  const append = (siteId: string, event: SiteTrackEvent) => { if (tracks[siteId]) tracks[siteId].push(event); };
+  const ordered = releases.slice().sort((left, right) => left.created_at.localeCompare(right.created_at));
+  const visible = ordered.slice(-3);
+  const isUpload = (activity: ActivityInput) => activity.action === "submission.accepted" || activity.action === "evaluation.received";
+  const inWindow = (activity: ActivityInput, after: string | null, before: string | null) => (
+    (!after || activity.created_at > after) && (!before || activity.created_at < before)
+  );
 
-  for (const activity of activities.slice().reverse()) {
-    if ((activity.action === "submission.accepted" || activity.action === "evaluation.received") && activity.site_id) {
-      append(activity.site_id, { at: activity.created_at, kind: "upload", releaseId: null });
-      continue;
+  return siteIds.map((siteId) => {
+    if (visible.length === 0) return { siteId, nodes: [] as SiteTrackNode[] };
+    const siteActivity = activities.filter((activity) => activity.site_id === siteId);
+    const firstIndex = ordered.findIndex((release) => release.release_id === visible[0].release_id);
+    const nodes: SiteTrackNode[] = [{
+      kind: "upload",
+      complete: siteActivity.some((activity) => isUpload(activity) && inWindow(activity, ordered[firstIndex - 1]?.created_at || null, visible[0].created_at)),
+      releaseId: null,
+    }];
+
+    for (const release of visible) {
+      const index = ordered.findIndex((item) => item.release_id === release.release_id);
+      const nextAt = ordered[index + 1]?.created_at || null;
+      const distribution = activities.some((activity) => activity.action === "release.stage.requested" && activity.target_id === release.release_id && Array.isArray(activity.detail?.site_ids) && activity.detail.site_ids.includes(siteId));
+      const reports = siteActivity
+        .filter((activity) => activity.action === "site.version.reported" && inWindow(activity, release.created_at, nextAt))
+        .sort((left, right) => right.created_at.localeCompare(left.created_at));
+      const reportedRelease = reports.length === 0
+        ? (nextAt ? null : currentReleases[siteId])
+        : typeof reports[0].detail?.reported_release_id === "string" ? reports[0].detail.reported_release_id : reports[0].target_id === "none" ? null : reports[0].target_id;
+      nodes.push(
+        { kind: "distribute", complete: distribution, releaseId: release.release_id },
+        { kind: "update", complete: reportedRelease === release.release_id, releaseId: release.release_id },
+        { kind: "upload", complete: siteActivity.some((activity) => isUpload(activity) && inWindow(activity, release.created_at, nextAt)), releaseId: null },
+      );
     }
-    if (activity.action === "release.stage.requested") {
-      const targets = Array.isArray(activity.detail?.site_ids) ? activity.detail.site_ids : [];
-      for (const siteId of targets) {
-        if (typeof siteId === "string") append(siteId, { at: activity.created_at, kind: "distribute", releaseId: activity.target_id });
-      }
-      continue;
-    }
-    if (activity.action !== "site.version.reported" || !activity.site_id) continue;
-    const previous = typeof activity.detail?.previous_release_id === "string" ? activity.detail.previous_release_id : null;
-    const current = typeof activity.detail?.reported_release_id === "string" ? activity.detail.reported_release_id : activity.target_id === "none" ? null : activity.target_id;
-    const rolledBack = previous !== null && (
-      current === null || (releaseDates[previous] && releaseDates[current || ""] && releaseDates[current || ""] < releaseDates[previous])
-    );
-    append(activity.site_id, { at: activity.created_at, kind: rolledBack ? "rollback" : "adopt", releaseId: current });
-  }
-  return siteIds.map((siteId) => ({ siteId, events: tracks[siteId].slice(-8) }));
+    return { siteId, nodes };
+  });
 }

@@ -42,13 +42,20 @@ test("builds site and weighted total trends in chronological round order", () =>
   assert.ok(Math.abs((trend.totals[2] || 0) - 13 / 15) < 0.000001);
 });
 
-test("maps uploads, distributions, adoption and rollback to each site", () => {
+test("builds complete and incomplete checkpoints for each release cycle", () => {
   const tracks = buildSiteTracks(["site-a"], [
-    { created_at: "2026-01-04T00:00:00Z", action: "site.version.reported", site_id: "site-a", target_id: "release-1", detail: { previous_release_id: "release-2", reported_release_id: "release-1" } },
-    { created_at: "2026-01-03T00:00:00Z", action: "site.version.reported", site_id: "site-a", target_id: "release-2", detail: { previous_release_id: "release-1", reported_release_id: "release-2" } },
-    { created_at: "2026-01-02T00:00:00Z", action: "release.stage.requested", site_id: null, target_id: "release-2", detail: { site_ids: ["site-a"] } },
     { created_at: "2026-01-01T00:00:00Z", action: "submission.accepted", site_id: "site-a", target_id: "submission-1" },
-  ], { "release-1": "2026-01-01T00:00:00Z", "release-2": "2026-01-03T00:00:00Z" });
+    { created_at: "2026-01-02T01:00:00Z", action: "release.stage.requested", site_id: null, target_id: "release-1", detail: { site_ids: ["site-a"] } },
+    { created_at: "2026-01-02T02:00:00Z", action: "site.version.reported", site_id: "site-a", target_id: "release-1", detail: { reported_release_id: "release-1" } },
+    { created_at: "2026-01-03T00:00:00Z", action: "submission.accepted", site_id: "site-a", target_id: "submission-2" },
+    { created_at: "2026-01-04T01:00:00Z", action: "release.stage.requested", site_id: null, target_id: "release-2", detail: { site_ids: ["site-a"] } },
+    { created_at: "2026-01-04T02:00:00Z", action: "site.version.reported", site_id: "site-a", target_id: "release-2", detail: { reported_release_id: "release-2" } },
+    { created_at: "2026-01-05T00:00:00Z", action: "site.version.reported", site_id: "site-a", target_id: "release-1", detail: { reported_release_id: "release-1" } },
+  ], [
+    { release_id: "release-1", created_at: "2026-01-02T00:00:00Z" },
+    { release_id: "release-2", created_at: "2026-01-04T00:00:00Z" },
+  ], { "site-a": "release-1" });
 
-  assert.deepEqual(tracks[0].events.map((event) => event.kind), ["upload", "distribute", "adopt", "rollback"]);
+  assert.deepEqual(tracks[0].nodes.map((node) => node.kind), ["upload", "distribute", "update", "upload", "distribute", "update", "upload"]);
+  assert.deepEqual(tracks[0].nodes.map((node) => node.complete), [true, true, true, true, true, false, false]);
 });
