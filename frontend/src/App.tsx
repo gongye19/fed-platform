@@ -1,6 +1,6 @@
 import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import PlatformOverview from "./PlatformOverview";
-import { groupEvaluationResults } from "./evaluation";
+import { buildEvaluationTrend, buildSiteTracks, groupEvaluationResults, type EvaluationRow, type SiteTrackEvent } from "./evaluation";
 import { siteContributionRows } from "./versions";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
@@ -83,6 +83,7 @@ type Activity = {
   site_id: string | null;
   target_type: string;
   target_id: string;
+  detail: Json;
   result: string;
 };
 type AgentJob = {
@@ -420,7 +421,7 @@ function ApplicationDetail({ appId, section, navigate }: { appId: string; sectio
     {error && <ErrorMessage error={error} />}
     <nav className="app-nav" aria-label={`${app.display_name} 导航`}>{APP_SECTIONS.map(([id, label]) => <button key={id} className={section === id ? "active" : ""} aria-current={section === id ? "page" : undefined} onClick={() => navigate(`${base}/${id}`)}>{label}</button>)}</nav>
     {section === "overview" && <ApplicationSites topology={topology} />}
-    {section === "evaluations" && <Evaluations items={evaluations} />}
+    {section === "evaluations" && <Evaluations items={evaluations} memberships={topology.memberships} releases={releases} activities={activities.filter((item) => !item.federation_id || item.federation_id === federationId)} />}
     {section === "versions" && <VersionManagement appId={appId} federationId={federationId} topology={topology} submissions={submissions} releases={releases} onRefresh={async () => { await Promise.all([loadTopology(), loadChannel()]); }} />}
     {section === "timeline" && <ActivityTimeline items={activities} />}
     {section === "logs" && <ActivityLog items={activities} />}
@@ -440,10 +441,71 @@ function ActivityLog({ items }: { items: Activity[] }) {
   return <section className="table-wrap"><div className="section-head"><div><p className="eyebrow">运行记录</p><h2>日志</h2></div><span>最近 {items.length} 条</span></div><table><thead><tr><th>时间</th><th>活动</th><th>来源</th><th>联邦域 / 站点</th><th>对象</th><th>结果</th></tr></thead><tbody>{items.map((item, index) => <tr key={`${item.created_at}-${index}`}><td>{formatTime(item.created_at)}</td><td><strong>{activityLabel(item.action)}</strong></td><td>{item.source === "event" ? "站点事件" : "平台操作"}</td><td><strong>{item.federation_id || "—"}</strong><small className="mono">{item.site_id || "应用 Agent"}</small></td><td><span>{activityTargetLabel(item.target_type)}</span><small className="mono">{shortId(item.target_id, 22)}</small></td><td><Status value={resultLabel(item.result)} /></td></tr>)}</tbody></table>{items.length === 0 && <Empty>这个应用还没有日志。</Empty>}</section>;
 }
 
-function Evaluations({ items }: { items: Submission[] }) {
+const chartColors = ["#7c86e8", "#76c7a0", "#d5a75d", "#e4777f", "#70b7d3", "#b08bd7"];
+
+function chartPath(values: Array<number | null>, x: (index: number) => number, y: (value: number) => number) {
+  let path = "";
+  let connected = false;
+  values.forEach((value, index) => {
+    if (value === null) { connected = false; return; }
+    path += `${connected ? "L" : "M"}${x(index).toFixed(1)},${y(value).toFixed(1)} `;
+    connected = true;
+  });
+  return path.trim();
+}
+
+function EffectChart({ rows, siteNames }: { rows: EvaluationRow[]; siteNames: Record<string, string> }) {
+  const trend = buildEvaluationTrend(rows);
+  const labels = ["联邦前", ...trend.rounds.map((_, index) => `第 ${index + 1} 轮`)];
+  const width = Math.max(760, labels.length * 145);
+  const height = 320;
+  const bounds = { top: 22, right: 24, bottom: 48, left: 52 };
+  const plotWidth = width - bounds.left - bounds.right;
+  const plotHeight = height - bounds.top - bounds.bottom;
+  const x = (index: number) => bounds.left + (labels.length === 1 ? 0 : plotWidth * index / (labels.length - 1));
+  const y = (value: number) => bounds.top + (1 - value) * plotHeight;
+  const siteSeries = trend.siteIds.map((siteId, index) => ({ siteId, values: trend.valuesBySite[siteId], color: chartColors[index % chartColors.length] }));
+
+  return <section className="effect-panel"><div className="section-head"><div><p className="eyebrow">各站点与总体</p><h2>效果趋势</h2></div><span>总体按样本数加权</span></div>
+    {rows.length === 0 ? <Empty>还没有站点上传效果结果。</Empty> : <>
+      <div className="effect-legend"><span><i className="effect-legend__line effect-legend__line--total" />总体</span>{siteSeries.map((series) => <span key={series.siteId}><i className="effect-legend__line" style={{ background: series.color }} />{siteNames[series.siteId] || series.siteId}</span>)}</div>
+      <div className="effect-chart__scroll"><svg className="effect-chart" viewBox={`0 0 ${width} ${height}`} style={{ minWidth: width }} role="img" aria-label="各站点与总体效果随联邦轮次的变化折线图">
+        {[0, .25, .5, .75, 1].map((tick) => <g key={tick}><line className="effect-chart__grid" x1={bounds.left} y1={y(tick)} x2={width - bounds.right} y2={y(tick)} /><text className="effect-chart__axis" x={bounds.left - 10} y={y(tick) + 4} textAnchor="end">{tick * 100}%</text></g>)}
+        {labels.map((label, index) => <text className="effect-chart__axis" key={label} x={x(index)} y={height - 16} textAnchor="middle"><title>{index === 0 ? label : trend.rounds[index - 1].roundId}</title>{label}</text>)}
+        {siteSeries.map((series) => <g key={series.siteId}><path className="effect-chart__site-line" d={chartPath(series.values, x, y)} stroke={series.color} />{series.values.map((value, index) => value === null ? null : <circle key={index} className="effect-chart__point" cx={x(index)} cy={y(value)} r="3.5" fill={series.color}><title>{`${siteNames[series.siteId] || series.siteId} · ${labels[index]} · ${(value * 100).toFixed(1)}%`}</title></circle>)}</g>)}
+        <path className="effect-chart__total-line" d={chartPath(trend.totals, x, y)} />
+        {trend.totals.map((value, index) => value === null ? null : <circle key={index} className="effect-chart__total-point" cx={x(index)} cy={y(value)} r="4.5"><title>{`总体 · ${labels[index]} · ${(value * 100).toFixed(1)}%`}</title></circle>)}
+      </svg></div>
+    </>}
+  </section>;
+}
+
+function trackEventLabel(event: SiteTrackEvent) {
+  return ({ upload: "上传数据", distribute: "下发版本", adopt: "开始使用", rollback: "回退版本" } as const)[event.kind];
+}
+
+function SiteOperationTracks({ memberships, releases, activities }: { memberships: Membership[]; releases: ReleaseSummary[]; activities: Activity[] }) {
+  const releaseNames = Object.fromEntries(releases.map((release) => [release.release_id, releaseLabel(release)]));
+  const releaseDates = Object.fromEntries(releases.map((release) => [release.release_id, release.created_at]));
+  const tracks = buildSiteTracks(memberships.map((member) => member.site_id), activities, releaseDates);
+  const members = Object.fromEntries(memberships.map((member) => [member.site_id, member]));
+  return <section className="effect-panel"><div className="section-head"><div><p className="eyebrow">上传与版本状态</p><h2>站点运行轨迹</h2></div><div className="track-legend"><span><i className="track-mark track-mark--upload" />上传</span><span><i className="track-mark track-mark--distribute" />下发</span><span><i className="track-mark track-mark--adopt" />使用</span><span><i className="track-mark track-mark--rollback" />回退</span></div></div>
+    {tracks.length === 0 ? <Empty>还没有站点接入这个应用。</Empty> : <div className="site-tracks">{tracks.map((track) => {
+      const member = members[track.siteId];
+      const current = member.reported_release_id ? releaseNames[member.reported_release_id] || shortId(member.reported_release_id, 10) : "尚未上报使用版本";
+      return <div className="site-track" key={track.siteId}><div className="site-track__site"><strong>{member.display_name}</strong><small className="mono">{track.siteId}</small><span>当前：{current}</span></div><div className="site-track__events">{track.events.length === 0 ? <span className="site-track__empty">暂无运行记录</span> : track.events.map((event, index) => {
+        const version = event.releaseId ? releaseNames[event.releaseId] || shortId(event.releaseId, 9) : null;
+        return <div className="site-track__event" key={`${event.at}-${index}`} title={`${trackEventLabel(event)}${version ? ` · ${version}` : ""} · ${formatTime(event.at)}`}><i className={`track-mark track-mark--${event.kind}`} /><strong>{trackEventLabel(event)}</strong><small>{version || formatTime(event.at)}</small></div>;
+      })}</div></div>;
+    })}</div>}
+  </section>;
+}
+
+function Evaluations({ items, memberships, releases, activities }: { items: Submission[]; memberships: Membership[]; releases: ReleaseSummary[]; activities: Activity[] }) {
   const percent = (value: unknown) => typeof value === "number" ? `${(value * 100).toFixed(1)}%` : "—";
   const rows = groupEvaluationResults(items);
-  return <section className="table-wrap"><div className="section-head"><div><p className="eyebrow">每轮站点结果</p><h2>效果</h2></div><span>{rows.length} 条结果</span></div><table><thead><tr><th>轮次</th><th>站点</th><th>联邦前</th><th>联邦后</th><th>结果</th><th>Skill 命中</th><th>上传时间</th></tr></thead><tbody>{rows.map((row) => { const change = row.baseline === null || row.candidate === null ? null : row.candidate - row.baseline; const result = change === null ? "等待联邦结果" : change > 0.0001 ? "提升" : change < -0.0001 ? "下降" : "持平"; return <tr key={row.key}><td className="mono">{row.roundId}</td><td className="mono">{row.siteId}</td><td>{percent(row.baseline)}</td><td>{percent(row.candidate)}</td><td><span className={`evaluation-result evaluation-result--${result === "提升" ? "up" : result === "下降" ? "down" : result === "持平" ? "same" : "waiting"}`}>{result}</span></td><td>{row.retrievalCases === null || row.sampleSize === null ? "—" : `${row.retrievalCases} / ${row.sampleSize}`}</td><td>{formatTime(row.createdAt)}</td></tr>; })}</tbody></table>{rows.length === 0 && <Empty>还没有站点上传效果结果。</Empty>}</section>;
+  const siteNames = Object.fromEntries(memberships.map((member) => [member.site_id, member.display_name]));
+  return <div className="evaluation-workbench"><EffectChart rows={rows} siteNames={siteNames} /><SiteOperationTracks memberships={memberships} releases={releases} activities={activities} /><section className="table-wrap"><div className="section-head"><div><p className="eyebrow">每轮站点结果</p><h2>结果明细</h2></div><span>{rows.length} 条结果</span></div><table><thead><tr><th>轮次</th><th>站点</th><th>联邦前</th><th>联邦后</th><th>结果</th><th>样本数</th><th>上传时间</th></tr></thead><tbody>{rows.map((row) => { const change = row.baseline === null || row.candidate === null ? null : row.candidate - row.baseline; const result = change === null ? "等待联邦结果" : change > 0.0001 ? "提升" : change < -0.0001 ? "下降" : "持平"; return <tr key={row.key}><td className="mono">{row.roundId}</td><td><strong>{siteNames[row.siteId] || row.siteId}</strong><small className="mono">{row.siteId}</small></td><td>{percent(row.baseline)}</td><td>{percent(row.candidate)}</td><td><span className={`evaluation-result evaluation-result--${result === "提升" ? "up" : result === "下降" ? "down" : result === "持平" ? "same" : "waiting"}`}>{result}</span></td><td>{row.sampleSize ?? "—"}</td><td>{formatTime(row.createdAt)}</td></tr>; })}</tbody></table>{rows.length === 0 && <Empty>还没有站点上传效果结果。</Empty>}</section></div>;
 }
 
 function releaseLabel(release: ReleaseSummary) {
