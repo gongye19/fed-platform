@@ -29,6 +29,7 @@ class FakeHarness:
 
     def run(self, prompt, session_id):
         assert "submission.accepted" in prompt
+        assert '"new_state" MUST be a JSON object' in prompt
         assert session_id == "agent-job-job-1"
         return SimpleNamespace(
             final_response='```json\n{"new_state":{"seen":1},"intents":[{"kind":"wait","payload":{}}],"evidence":{}}\n```',
