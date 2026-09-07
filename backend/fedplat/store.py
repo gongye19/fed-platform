@@ -689,11 +689,16 @@ class Database:
         federation_id: str,
         round_id: str,
         submission_ids: list[str],
-        base_release_id: str | None = None,
     ) -> tuple[dict[str, Any], bool]:
         self.get_algorithm_inputs(app_id, federation_id, submission_ids)
-        self.get_algorithm_base(app_id, federation_id, base_release_id)
         with self.connection() as conn:
+            base = conn.execute(
+                """SELECT release_id FROM releases
+                   WHERE app_id = %s AND federation_id = %s
+                   ORDER BY release_number DESC LIMIT 1""",
+                (app_id, federation_id),
+            ).fetchone()
+            base_release_id = str(base["release_id"]) if base else None
             if base_release_id:
                 repeated = conn.execute(
                     """WITH RECURSIVE lineage AS (

@@ -135,7 +135,6 @@ class FederationGenerationRequest(BaseModel):
 
     round_id: StableId
     submission_ids: list[UUID] = Field(min_length=1, max_length=10_000)
-    base_release_id: UUID | None = None
 
     @model_validator(mode="after")
     def unique_submissions(self) -> FederationGenerationRequest:

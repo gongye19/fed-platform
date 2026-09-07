@@ -2,7 +2,13 @@ import pytest
 from pydantic import ValidationError
 
 from fedplat.app import require_admin
-from fedplat.protocol import CommandAck, FedAppManifest, ReleaseCreate, json_digest
+from fedplat.protocol import (
+    CommandAck,
+    FederationGenerationRequest,
+    FedAppManifest,
+    ReleaseCreate,
+    json_digest,
+)
 from fedplat.settings import Settings
 
 
@@ -57,6 +63,20 @@ def test_release_and_ack_boundaries():
         ReleaseCreate(artifact_digests=[digest, digest])
     with pytest.raises(ValidationError):
         CommandAck(result="failed")
+
+
+def test_generation_request_only_selects_site_data():
+    submission_id = "00000000-0000-4000-8000-000000000001"
+    request = FederationGenerationRequest(
+        round_id="selection-1", submission_ids=[submission_id]
+    )
+    assert str(request.submission_ids[0]) == submission_id
+    with pytest.raises(ValidationError):
+        FederationGenerationRequest(
+            round_id="selection-1",
+            submission_ids=[submission_id],
+            base_release_id="00000000-0000-4000-8000-000000000002",
+        )
 
 
 def test_admin_auth_can_be_disabled_explicitly():

@@ -575,10 +575,9 @@ function FederationVersionTable({ releases, dataNames, versionNames }: {
   versionNames: Map<string, string>;
 }) {
   return <section className="table-wrap version-table"><div className="section-head"><div><p className="eyebrow">已生成版本</p><h2>联邦版本</h2></div><span>{releases.length} 个版本</span></div>
-    <div className="version-table__scroll"><table><thead><tr><th>版本编号</th><th>生成时间</th><th>基础版本</th><th>本次站点数据</th></tr></thead><tbody>{releases.map((release) => <tr key={release.release_id}>
+    <div className="version-table__scroll"><table><thead><tr><th>版本编号</th><th>生成时间</th><th>本次站点数据</th></tr></thead><tbody>{releases.map((release) => <tr key={release.release_id}>
       <td><strong translate="no">{versionNames.get(release.release_id) || "数据未关联"}</strong></td>
       <td><time>{formatTime(release.created_at)}</time></td>
-      <td>{release.base_release_id ? versionNames.get(release.base_release_id) || "历史联邦版本" : "从空白生成"}</td>
       <td>{release.inputs?.length > 0 ? release.inputs.map((input) => dataNames.get(input.submission_id) || "数据未编号").join("、") : "输入未关联"}</td>
     </tr>)}</tbody></table></div>
     {releases.length === 0 && <Empty>还没有生成联邦版本。</Empty>}
@@ -605,9 +604,8 @@ function VersionManagement({ appId, federationId, topology, submissions, release
 }) {
   const visibleReleases = latestReleaseInstances(releases);
   const [selectedId, setSelectedId] = useState(visibleReleases[0]?.release_id || "");
-  const [baseReleaseId, setBaseReleaseId] = useState(visibleReleases[0]?.release_id || "");
   const contributions = submissions.filter((item) => item.purpose === "contribution" && item.status === "accepted");
-  const inheritedInputs = releaseLineageInputIds(releases, baseReleaseId);
+  const inheritedInputs = releaseLineageInputIds(releases, visibleReleases[0]?.release_id || "");
   const [selectedInputs, setSelectedInputs] = useState<string[]>(() => contributions.filter((item) => !inheritedInputs.has(item.submission_id)).map((item) => item.submission_id));
   const selectedInputSet = new Set(selectedInputs);
   const [selectedSites, setSelectedSites] = useState<string[]>([]);
@@ -637,7 +635,6 @@ function VersionManagement({ appId, federationId, topology, submissions, release
         body: JSON.stringify({
           round_id: `selection-${Date.now().toString(36)}`,
           submission_ids: readySubmissions.map((item) => item.submission_id),
-          base_release_id: baseReleaseId || null,
         }),
       });
       let job = requested;
@@ -649,7 +646,6 @@ function VersionManagement({ appId, federationId, topology, submissions, release
       const release = await api<{ release_id: string }>(`${base}/releases/generate`, { method: "POST", body: JSON.stringify({ generation_job_id: requested.job_id }) });
       await onRefresh();
       setSelectedId(release.release_id);
-      setBaseReleaseId(release.release_id);
       setSelectedInputs([]);
       setMessage({ tone: "success", text: "新的联邦版本已生成。" });
     } catch (reason) {
@@ -679,8 +675,7 @@ function VersionManagement({ appId, federationId, topology, submissions, release
     <FederationVersionTable releases={visibleReleases} dataNames={codes.data} versionNames={codes.releases} />
     <section className="version-panel contribution-panel">
       <div className="section-head"><div><p className="eyebrow">选择站点上传数据</p><h2>联邦生成</h2></div><span>已选 {selectedInputs.length} / {contributions.length}</span></div>
-      <fieldset className="release-options"><legend>基础联邦版本</legend><div className="release-options__list"><label className="release-option"><input type="radio" name="generation-base" value="" checked={!baseReleaseId} onChange={() => { setBaseReleaseId(""); setSelectedInputs(contributions.map((item) => item.submission_id)); }} /><strong>从空白生成</strong></label>{visibleReleases.map((release) => <label className="release-option" key={release.release_id}><input type="radio" name="generation-base" value={release.release_id} checked={baseReleaseId === release.release_id} onChange={() => { setBaseReleaseId(release.release_id); const inherited = releaseLineageInputIds(releases, release.release_id); setSelectedInputs(contributions.filter((item) => !inherited.has(item.submission_id)).map((item) => item.submission_id)); }} /><strong translate="no">{codes.releases.get(release.release_id) || "数据未关联"}</strong></label>)}</div></fieldset>
-      <div className="batch-groups">{topology.memberships.map((member) => { const siteContributions = contributions.filter((submission) => submission.site_id === member.site_id); return <section className="batch-group" key={member.site_id}><div className="batch-group__head"><strong>{codes.sites.get(member.site_id) || "站点未编号"}</strong><span>{siteContributions.length} 份数据</span></div><div className="batch-group__list">{siteContributions.map((submission) => { const inherited = inheritedInputs.has(submission.submission_id); return <label key={submission.submission_id} className={selectedInputSet.has(submission.submission_id) ? "batch-option selected" : "batch-option"}><input type="checkbox" name="generation-input" value={submission.submission_id} disabled={inherited} checked={selectedInputSet.has(submission.submission_id)} onChange={(event) => setSelectedInputs((current) => event.target.checked ? [...current, submission.submission_id] : current.filter((item) => item !== submission.submission_id))} /><span><strong>{codes.data.get(submission.submission_id) || "数据未编号"}</strong><small>{inherited ? "基础版本已包含" : formatTime(submission.created_at)}</small></span></label>; })}{siteContributions.length === 0 && <p className="batch-group__empty">暂无上传数据</p>}</div></section>; })}</div>
+      <div className="batch-groups">{topology.memberships.map((member) => { const siteContributions = contributions.filter((submission) => submission.site_id === member.site_id); return <section className="batch-group" key={member.site_id}><div className="batch-group__head"><strong>{codes.sites.get(member.site_id) || "站点未编号"}</strong><span>{siteContributions.length} 份数据</span></div><div className="batch-group__list">{siteContributions.map((submission) => { const inherited = inheritedInputs.has(submission.submission_id); return <label key={submission.submission_id} className={selectedInputSet.has(submission.submission_id) ? "batch-option selected" : "batch-option"}><input type="checkbox" name="generation-input" value={submission.submission_id} disabled={inherited} checked={selectedInputSet.has(submission.submission_id)} onChange={(event) => setSelectedInputs((current) => event.target.checked ? [...current, submission.submission_id] : current.filter((item) => item !== submission.submission_id))} /><span><strong>{codes.data.get(submission.submission_id) || "数据未编号"}</strong><small>{inherited ? "已用于联邦" : formatTime(submission.created_at)}</small></span></label>; })}{siteContributions.length === 0 && <p className="batch-group__empty">暂无上传数据</p>}</div></section>; })}</div>
       {contributions.length === 0 && <Empty>还没有站点上传可联邦数据。</Empty>}
       <div className="version-panel__action"><button className="text-button" type="button" disabled={contributions.length === 0 || busy !== ""} onClick={() => setSelectedInputs(contributions.filter((item) => !inheritedInputs.has(item.submission_id)).map((item) => item.submission_id))}>选择可用数据</button><button className="button button--primary" type="button" disabled={selectedInputs.length === 0 || busy !== ""} onClick={generate}>{busy === "generate" ? "生成中…" : `用 ${selectedInputs.length} 份数据生成`}</button></div>
     </section>

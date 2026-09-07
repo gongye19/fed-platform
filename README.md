@@ -98,4 +98,4 @@ GET  /site/v1/apps/{app_id}/commands
 POST /site/v1/apps/{app_id}/commands/{command_id}/ack
 ```
 
-生成请求可选 `base_release_id`。提供时，算法会同时收到基础版本工件与本次选择的站点 Submission，并输出可独立下发的完整新版本。
+生成请求只提交本次选择的站点 Submission。平台自动把该联邦域最新生成的版本及本次站点数据交给 Agent，算法输出可独立下发的完整新版本。

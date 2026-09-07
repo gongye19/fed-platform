@@ -335,7 +335,6 @@ def request_federation_generation(
             federation_id,
             body.round_id,
             [str(item) for item in body.submission_ids],
-            str(body.base_release_id) if body.base_release_id else None,
         )
     except (ConflictError, NotFoundError, ForbiddenError) as exc:
         map_store_error(exc)

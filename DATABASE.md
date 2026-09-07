@@ -248,7 +248,7 @@ agent_jobs              唤醒对应 FederationAgent
 
 ### 创建 Release
 
-Agent 生成成功后，同一事务写入不可变 `releases`、`release_inputs` 和 `release_artifacts`；此时不预设目标站点。`base_release_id` 记录直接继承的版本，`release_inputs` 只记录本次新增输入，二者共同形成完整谱系。
+Agent 生成成功后，同一事务写入不可变 `releases`、`release_inputs` 和 `release_artifacts`；此时不预设目标站点。平台自动用最新联邦版本写入 `base_release_id`，`release_inputs` 只记录本次新增输入，二者共同形成完整谱系。
 管理员可以从任意站点的任意贡献批次组合生成版本，也可以把任意版本下发给任意有接收权限的站点。
 点击下发时才为实际目标写入 `deliveries` 和 `commands`。任何目标越权或 Artifact 跨作用域，整个事务失败。
 
