@@ -232,7 +232,8 @@ def _agent_prompt(job: dict[str, Any], instructions: str) -> str:
         "Plan the next federation action for this event. Return exactly one JSON object with "
         'keys "new_state", "intents", and "evidence". Each intent has "kind" and "payload"; '
         "allowed kinds are run_algorithm, issue_task, propose_release, distribute_release, wait, "
-        "and fail. Do not claim that an action already happened.\n\n"
+        "and fail. Do not claim that an action already happened. For generation.requested, return "
+        "one run_algorithm intent and copy the event payload exactly, including base_release_id.\n\n"
         + json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
     )
 
