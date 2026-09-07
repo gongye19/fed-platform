@@ -75,7 +75,9 @@ def test_agent_core_configuration_and_state_are_bounded():
 
 def test_agent_decision_normalizes_non_object_state_and_evidence():
     decision = _parse_decision(
-        '{"new_state":"running","intents":[],"evidence":[{"source":"model"}]}',
+        'Here is the decision:\n```json\n'
+        '{"new_state":"running","intents":[],"evidence":[{"source":"model"}]}\n'
+        "```\nDone.",
         1024,
         fallback_state={"kept": True},
     )

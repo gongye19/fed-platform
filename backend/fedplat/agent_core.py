@@ -212,7 +212,23 @@ def _parse_decision(
     if len(text.encode()) > MAX_DECISION_BYTES:
         raise AgentCoreError("agent decision is too large")
     try:
-        payload = json.loads(text)
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            decoder = json.JSONDecoder()
+            payload = None
+            for offset, character in enumerate(text):
+                if character != "{":
+                    continue
+                try:
+                    candidate, _ = decoder.raw_decode(text[offset:])
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(candidate, dict) and "intents" in candidate:
+                    payload = candidate
+                    break
+            if payload is None:
+                raise ValueError("no decision object found")
         if not isinstance(payload, dict):
             raise ValueError("decision must be an object")
         if not isinstance(payload.get("new_state"), dict):
@@ -221,7 +237,8 @@ def _parse_decision(
             payload["evidence"] = {"items": payload.get("evidence")}
         decision = AgentDecision.model_validate(payload)
     except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-        raise AgentCoreError("agent returned an invalid decision") from exc
+        detail = " ".join(str(exc).split())[:500]
+        raise AgentCoreError(f"agent returned an invalid decision: {detail}") from exc
     if len(json.dumps(decision.new_state, separators=(",", ":"), ensure_ascii=False).encode()) > max_state_bytes:
         raise AgentCoreError("agent state exceeds configured limit")
     return decision
