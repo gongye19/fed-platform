@@ -517,7 +517,6 @@ function ActivityLog({ items, memberships, submissions, releases }: { items: Act
 }
 
 const chartColors = ["#7c86e8", "#76c7a0", "#d5a75d", "#e4777f", "#70b7d3", "#b08bd7"];
-const chartDashes = [undefined, "9 5", "2 4"];
 
 function chartPath(values: Array<number | null>, x: (index: number) => number, y: (value: number) => number) {
   let path = "";
@@ -532,8 +531,8 @@ function chartPath(values: Array<number | null>, x: (index: number) => number, y
 
 function EffectChart({ rows, siteNames, versionNames }: { rows: EvaluationRow[]; siteNames: Record<string, string>; versionNames: Map<string, string> }) {
   const trend = buildEvaluationTrend(rows);
-  const labels = ["联邦前", ...trend.rounds.map((item) => versionNames.get(item.roundId) || "未关联版本")];
-  const width = Math.max(1440, labels.length * 180);
+  const labels = ["F-0", ...trend.rounds.map((item) => versionNames.get(item.roundId) || "未关联版本")];
+  const width = Math.max(1080, labels.length * 160);
   const height = 320;
   const bounds = { top: 22, right: 24, bottom: 48, left: 52 };
   const plotWidth = width - bounds.left - bounds.right;
@@ -544,18 +543,19 @@ function EffectChart({ rows, siteNames, versionNames }: { rows: EvaluationRow[];
     siteId,
     values: trend.valuesBySite[siteId],
     color: chartColors[index % chartColors.length],
-    dash: chartDashes[index % chartDashes.length],
-    pointRadius: 6 - (index % chartDashes.length) * 1.4,
   }));
 
   return <section className="effect-panel"><div className="section-head"><div><p className="eyebrow">各站点</p><h2>效果趋势</h2></div></div>
     {rows.length === 0 ? <Empty>还没有站点上传效果结果。</Empty> : <>
-      <div className="effect-legend">{siteSeries.map((series, index) => <span key={series.siteId}><i className={`effect-legend__line effect-legend__line--${index % chartDashes.length}`} aria-hidden="true" style={{ borderColor: series.color }} />{siteNames[series.siteId] || series.siteId}</span>)}</div>
+      <div className="effect-legend">{siteSeries.map((series) => <span key={series.siteId}><i className="effect-legend__line" aria-hidden="true" style={{ borderColor: series.color }} />{siteNames[series.siteId] || series.siteId}</span>)}</div>
       <div className="effect-chart__scroll" tabIndex={0} aria-label="效果趋势图，可左右滑动查看全部联邦版本"><svg className="effect-chart" style={{ width }} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="各站点在不同联邦版本下的效果折线图">
         {[.5, .6, .7, .8, .9, 1].map((tick) => <g key={tick}><line className="effect-chart__grid" x1={bounds.left} y1={y(tick)} x2={width - bounds.right} y2={y(tick)} /><text className="effect-chart__axis" x={bounds.left - 10} y={y(tick) + 4} textAnchor="end">{percentFormatter.format(tick)}</text></g>)}
         {labels.map((label, index) => labels.length <= 10 || index === labels.length - 1 || index % Math.ceil(labels.length / 8) === 0 ? <text className="effect-chart__axis" key={`${label}-${index}`} x={x(index)} y={height - 16} textAnchor="middle">{label}</text> : null)}
-        {siteSeries.map((series) => <path key={series.siteId} className="effect-chart__site-line" d={chartPath(series.values, x, y)} stroke={series.color} strokeDasharray={series.dash} />)}
-        {siteSeries.map((series) => <g key={series.siteId}>{series.values.map((value, index) => value === null ? null : <circle key={index} className="effect-chart__point" cx={x(index)} cy={y(value)} r={series.pointRadius} fill={series.color}><title>{`${siteNames[series.siteId] || series.siteId}，${labels[index]}，${percentFormatter.format(value)}`}</title></circle>)}</g>)}
+        {siteSeries.map((series) => <g className="effect-chart__series" key={series.siteId}>
+          <path className="effect-chart__site-line" d={chartPath(series.values, x, y)} stroke={series.color} />
+          <path className="effect-chart__hit-line" d={chartPath(series.values, x, y)} />
+          {series.values.map((value, index) => value === null ? null : <circle key={index} className="effect-chart__point" cx={x(index)} cy={y(value)} r="3.5" fill={series.color}><title>{`${siteNames[series.siteId] || series.siteId}，${labels[index]}，${percentFormatter.format(value)}`}</title></circle>)}
+        </g>)}
       </svg></div>
     </>}
   </section>;

@@ -261,15 +261,16 @@ td small { margin-top: 4px; }
 .effect-legend { display: flex; flex-wrap: wrap; gap: 10px 18px; padding: 14px 20px 0; color: var(--secondary); font-size: 11px; }
 .effect-legend span { display: inline-flex; align-items: center; gap: 7px; }
 .effect-legend__line { width: 18px; height: 0; border-top: 2px solid var(--secondary); }
-.effect-legend__line--1 { border-top-style: dashed; }
-.effect-legend__line--2 { border-top-style: dotted; }
 .effect-chart__scroll { overflow-x: auto; overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch; }
 .effect-chart__scroll:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 .effect-chart { display: block; max-width: none; height: auto; }
 .effect-chart__grid { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.effect-chart__axis { fill: var(--muted); font: 10px "Geist Mono Variable", monospace; }
-.effect-chart__site-line { fill: none; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-.effect-chart__site-line { stroke-width: 1.5; opacity: .8; }
+.effect-chart__axis { fill: var(--secondary); font: 520 12px/1 "Geist Mono Variable", monospace; }
+.effect-chart__series { transition: opacity 160ms ease; }
+.effect-chart__site-line { fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; opacity: .8; vector-effect: non-scaling-stroke; transition: stroke-width 160ms ease, opacity 160ms ease; }
+.effect-chart__hit-line { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; vector-effect: non-scaling-stroke; }
+.effect-chart:has(.effect-chart__series:hover) .effect-chart__series:not(:hover) { opacity: .22; }
+.effect-chart__series:hover .effect-chart__site-line { stroke-width: 3; opacity: 1; }
 .effect-chart__point { stroke: var(--surface-1); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .version-workbench { display: grid; gap: 28px; max-width: 1320px; margin: 0 auto; }
 .version-workbench > .message { width: 100%; margin-bottom: 0; }
