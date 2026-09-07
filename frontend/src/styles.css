@@ -260,9 +260,12 @@ td small { margin-top: 4px; }
 .effect-panel { min-width: 0; overflow: hidden; background: var(--surface-1); border: 1px solid var(--line); border-radius: var(--radius-md); }
 .effect-legend { display: flex; flex-wrap: wrap; gap: 10px 18px; padding: 14px 20px 0; color: var(--secondary); font-size: 11px; }
 .effect-legend span { display: inline-flex; align-items: center; gap: 7px; }
-.effect-legend__line { width: 18px; height: 2px; background: var(--secondary); border-radius: 2px; }
-.effect-chart__scroll { overflow-x: auto; }
-.effect-chart { display: block; width: 100%; min-width: 760px; height: auto; }
+.effect-legend__line { width: 18px; height: 0; border-top: 2px solid var(--secondary); }
+.effect-legend__line--1 { border-top-style: dashed; }
+.effect-legend__line--2 { border-top-style: dotted; }
+.effect-chart__scroll { overflow-x: auto; overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch; }
+.effect-chart__scroll:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.effect-chart { display: block; max-width: none; height: auto; }
 .effect-chart__grid { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .effect-chart__axis { fill: var(--muted); font: 10px "Geist Mono Variable", monospace; }
 .effect-chart__site-line { fill: none; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
