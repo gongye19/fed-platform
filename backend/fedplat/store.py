@@ -661,15 +661,55 @@ class Database:
                 raise NotFoundError("one or more algorithm inputs are unavailable in this federation")
             return rows
 
+    def get_algorithm_base(
+        self, app_id: str, federation_id: str, release_id: str | None
+    ) -> list[dict[str, Any]]:
+        if not release_id:
+            return []
+        with self.connection() as conn:
+            rows = conn.execute(
+                """SELECT a.digest, a.type_name, a.format_version, a.media_type,
+                          a.size_bytes, a.metadata, a.storage_key
+                   FROM releases r
+                   JOIN release_artifacts ra USING (release_id)
+                   JOIN artifacts a
+                     ON a.app_id = ra.app_id AND a.federation_id = ra.federation_id
+                    AND a.digest = ra.artifact_digest
+                   WHERE r.release_id = %s AND r.app_id = %s AND r.federation_id = %s
+                   ORDER BY a.digest""",
+                (release_id, app_id, federation_id),
+            ).fetchall()
+            if not rows:
+                raise NotFoundError("base release was not found in this federation")
+            return rows
+
     def request_generation(
         self,
         app_id: str,
         federation_id: str,
         round_id: str,
         submission_ids: list[str],
+        base_release_id: str | None = None,
     ) -> tuple[dict[str, Any], bool]:
         self.get_algorithm_inputs(app_id, federation_id, submission_ids)
+        self.get_algorithm_base(app_id, federation_id, base_release_id)
         with self.connection() as conn:
+            if base_release_id:
+                repeated = conn.execute(
+                    """WITH RECURSIVE lineage AS (
+                         SELECT release_id, base_release_id FROM releases
+                          WHERE release_id = %s AND app_id = %s AND federation_id = %s
+                         UNION ALL
+                         SELECT r.release_id, r.base_release_id FROM releases r
+                         JOIN lineage l ON r.release_id = l.base_release_id
+                       )
+                       SELECT ri.submission_id FROM lineage l
+                       JOIN release_inputs ri USING (release_id)
+                       WHERE ri.submission_id = ANY(%s::uuid[]) LIMIT 1""",
+                    (base_release_id, app_id, federation_id, submission_ids),
+                ).fetchone()
+                if repeated:
+                    raise ConflictError("a selected submission is already included by the base release")
             agent = conn.execute(
                 """SELECT revision FROM federation_agents
                    WHERE app_id = %s AND federation_id = %s
@@ -682,12 +722,14 @@ class Database:
                 (
                     round_id
                     + f"\nrevision:{agent['revision']}\n"
+                    + f"base:{base_release_id or 'none'}\n"
                     + "\n".join(sorted(submission_ids))
                 ).encode()
             ).hexdigest()
             payload = {
                 "round_id": round_id,
                 "submission_ids": submission_ids,
+                "base_release_id": base_release_id,
                 "agent_config_revision": agent["revision"],
             }
             job = conn.execute(
@@ -1038,6 +1080,7 @@ class Database:
         *,
         generation_job_id: uuid.UUID | None = None,
         input_submission_ids: list[str] | None = None,
+        base_release_id: str | None = None,
     ) -> dict[str, Any]:
         release_id = uuid.uuid4()
         input_submission_ids = input_submission_ids or []
@@ -1048,6 +1091,13 @@ class Database:
                 (app_id, federation_id),
             ).fetchone():
                 raise NotFoundError("federation not found")
+
+            if base_release_id and not conn.execute(
+                """SELECT 1 FROM releases
+                   WHERE release_id = %s AND app_id = %s AND federation_id = %s""",
+                (base_release_id, app_id, federation_id),
+            ).fetchone():
+                raise NotFoundError("base release was not found in this federation")
 
             found_artifacts = conn.execute(
                 """SELECT a.digest FROM artifacts a
@@ -1112,11 +1162,18 @@ class Database:
             release = conn.execute(
                 """INSERT INTO releases
                    (release_id, app_id, federation_id, created_by,
-                    release_number, generation_job_id)
-                   VALUES (%s, %s, %s, 'admin', %s, %s)
+                    release_number, generation_job_id, base_release_id)
+                   VALUES (%s, %s, %s, 'admin', %s, %s, %s)
                    RETURNING release_id, release_number, app_id, federation_id,
-                             created_by, generation_job_id, created_at""",
-                (release_id, app_id, federation_id, release_number, generation_job_id),
+                             created_by, generation_job_id, base_release_id, created_at""",
+                (
+                    release_id,
+                    app_id,
+                    federation_id,
+                    release_number,
+                    generation_job_id,
+                    base_release_id,
+                ),
             ).fetchone()
             with conn.cursor() as cursor:
                 cursor.executemany(
@@ -1156,6 +1213,7 @@ class Database:
                         "release_number": release_number,
                         "artifact_digests": artifact_digests,
                         "generation_job_id": str(generation_job_id) if generation_job_id else None,
+                        "base_release_id": base_release_id,
                         "submission_ids": input_submission_ids,
                         "site_ids": target_ids,
                     }),
@@ -1217,6 +1275,7 @@ class Database:
                 return {
                     "generation_job_id": job["job_id"],
                     "submission_ids": [str(value) for value in job["payload"].get("submission_ids", [])],
+                    "base_release_id": job["payload"].get("base_release_id"),
                     "artifact_digests": output_digests,
                 }
 
@@ -1249,6 +1308,7 @@ class Database:
         with self.connection() as conn:
             return conn.execute(
                 """SELECT r.release_id, r.release_number, r.generation_job_id,
+                          r.base_release_id,
                           r.created_by, r.created_at,
                           artifact.artifact_digests, artifact.version_label,
                           artifact.algorithm_id,
@@ -1321,6 +1381,7 @@ class Database:
         with self.connection() as conn:
             release = conn.execute(
                 """SELECT release_id, release_number, generation_job_id,
+                          base_release_id,
                           app_id, federation_id, created_by, created_at
                    FROM releases
                    WHERE app_id = %s AND federation_id = %s AND release_id = %s""",

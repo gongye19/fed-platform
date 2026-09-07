@@ -27,6 +27,22 @@ class FakeDatabase:
             }
         ]
 
+    def get_algorithm_base(self, app_id, federation_id, release_id):
+        if not release_id:
+            return []
+        content = b'{"global":false}'
+        return [
+            {
+                "digest": "sha256:" + hashlib.sha256(content).hexdigest(),
+                "type_name": "example.release",
+                "format_version": 1,
+                "media_type": "application/json",
+                "metadata": {"round_id": "round-0"},
+                "storage_key": "base",
+                "size_bytes": len(content),
+            }
+        ]
+
     def artifact_policy(self, app_id, federation_id, type_name, format_version):
         return {
             "purpose": "release",
@@ -47,7 +63,7 @@ class FakeArtifacts:
     stored = None
 
     def read_bytes(self, key, expected_size):
-        return b'{"site":"a"}'
+        return b'{"global":false}' if key == "base" else b'{"site":"a"}'
 
     def put_file(self, **values):
         self.stored = values["file"].read()
@@ -58,8 +74,10 @@ class FakeAlgorithm:
     plugin_id = "example-merge"
     plugin_version = "1"
 
-    def run(self, *, inputs, config, state, round_id):
+    def run(self, *, inputs, base_release_id, base_artifacts, config, state, round_id):
         assert inputs[0].site_id == "site-a"
+        assert base_release_id == "00000000-0000-4000-8000-000000000001"
+        assert base_artifacts[0].content == b'{"global":false}'
         return AlgorithmResult(
             outputs=[
                 AlgorithmOutput(
@@ -91,6 +109,7 @@ def test_bound_algorithm_produces_a_generic_release_artifact():
         payload={
             "round_id": "round-1",
             "submission_ids": [str(uuid.uuid4())],
+            "base_release_id": "00000000-0000-4000-8000-000000000001",
             "agent_config_revision": 1,
         },
         db=database,

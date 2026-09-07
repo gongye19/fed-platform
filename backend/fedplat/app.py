@@ -335,6 +335,7 @@ def request_federation_generation(
             federation_id,
             body.round_id,
             [str(item) for item in body.submission_ids],
+            str(body.base_release_id) if body.base_release_id else None,
         )
     except (ConflictError, NotFoundError, ForbiddenError) as exc:
         map_store_error(exc)
@@ -547,6 +548,7 @@ def generate_release(
             None,
             generation_job_id=source.get("generation_job_id"),
             input_submission_ids=source.get("submission_ids", []),
+            base_release_id=source.get("base_release_id"),
         )
     except (ConflictError, NotFoundError, ForbiddenError) as exc:
         map_store_error(exc)

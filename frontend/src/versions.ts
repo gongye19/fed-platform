@@ -62,15 +62,31 @@ export function federationCodes(
 export function latestReleaseInstances<T extends {
   release_id: string;
   created_at: string;
+  base_release_id?: string | null;
   inputs?: Array<{ submission_id: string }>;
 }>(releases: T[]) {
   const latest = new Map<string, T>();
   releases.forEach((release) => {
     const inputIds = (release.inputs || []).map((input) => input.submission_id).sort();
-    const key = inputIds.length > 0 ? inputIds.join(":") : release.release_id;
+    const key = inputIds.length > 0 ? `${release.base_release_id || "none"}:${inputIds.join(":")}` : release.release_id;
     const current = latest.get(key);
     if (!current || release.created_at > current.created_at) latest.set(key, release);
   });
   const visibleIds = new Set(Array.from(latest.values(), (release) => release.release_id));
   return releases.filter((release) => visibleIds.has(release.release_id));
+}
+
+export function releaseLineageInputIds<T extends {
+  release_id: string;
+  base_release_id?: string | null;
+  inputs?: Array<{ submission_id: string }>;
+}>(releases: T[], releaseId: string) {
+  const byId = new Map(releases.map((release) => [release.release_id, release]));
+  const inputs = new Set<string>();
+  const seen = new Set<string>();
+  for (let id: string | null | undefined = releaseId; id && !seen.has(id); id = byId.get(id)?.base_release_id) {
+    seen.add(id);
+    byId.get(id)?.inputs?.forEach((input) => inputs.add(input.submission_id));
+  }
+  return inputs;
 }

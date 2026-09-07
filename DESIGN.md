@@ -363,7 +363,7 @@ AgentCorePlugin.handle(agent_snapshot, event) ->
 ArtifactHandlerPlugin.inspect(artifact_descriptor, content_ref) ->
     {valid, normalized_metadata, compatibility_key, errors[]}
 
-FederationAlgorithmPlugin.run(federation_snapshot, input_refs[], plugin_state) ->
+FederationAlgorithmPlugin.run(base_release_artifacts[], input_refs[], plugin_state) ->
     {new_plugin_state, output_artifacts[], task_intents[], evidence}
 ```
 

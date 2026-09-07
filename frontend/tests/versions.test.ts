@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { contributionBatchNumbers, dataCodes, federationCodes, latestReleaseGroup, latestReleaseInstances, siteCodes } from "../src/versions.ts";
+import { contributionBatchNumbers, dataCodes, federationCodes, latestReleaseGroup, latestReleaseInstances, releaseLineageInputIds, siteCodes } from "../src/versions.ts";
 
 test("builds app-scoped site, data, and federation codes", () => {
   const sites = [{ site_id: "site-c" }, { site_id: "site-a" }, { site_id: "site-b" }];
@@ -50,4 +50,15 @@ test("keeps the newest release when the same inputs are generated again", () => 
   ];
 
   assert.deepEqual(latestReleaseInstances(releases).map((release) => release.release_id), ["new", "other"]);
+});
+
+test("collects inherited inputs without collapsing releases from different bases", () => {
+  const releases = [
+    { release_id: "root", created_at: "2026-01-01T00:00:00Z", inputs: [{ submission_id: "a" }] },
+    { release_id: "branch-a", base_release_id: "root", created_at: "2026-01-02T00:00:00Z", inputs: [{ submission_id: "b" }] },
+    { release_id: "branch-b", base_release_id: null, created_at: "2026-01-03T00:00:00Z", inputs: [{ submission_id: "b" }] },
+  ];
+
+  assert.deepEqual([...releaseLineageInputIds(releases, "branch-a")].sort(), ["a", "b"]);
+  assert.deepEqual(latestReleaseInstances(releases).map((release) => release.release_id), ["root", "branch-a", "branch-b"]);
 });

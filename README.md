@@ -97,3 +97,5 @@ PUT  /site/v1/apps/{app_id}/status     # 独立上报应用版本和当前采用
 GET  /site/v1/apps/{app_id}/commands
 POST /site/v1/apps/{app_id}/commands/{command_id}/ack
 ```
+
+生成请求可选 `base_release_id`。提供时，算法会同时收到基础版本工件与本次选择的站点 Submission，并输出可独立下发的完整新版本。

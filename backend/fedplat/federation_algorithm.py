@@ -41,6 +41,7 @@ class RunAlgorithmIntent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     submission_ids: list[UUID] = Field(min_length=1, max_length=10_000)
+    base_release_id: UUID | None = None
     round_id: str = Field(min_length=1, max_length=128)
     agent_config_revision: int = Field(ge=1)
 
@@ -49,6 +50,16 @@ class RunAlgorithmIntent(BaseModel):
 class AlgorithmInput:
     submission_id: str
     site_id: str
+    digest: str
+    type_name: str
+    format_version: int
+    media_type: str
+    metadata: dict[str, Any]
+    content: bytes
+
+
+@dataclass(frozen=True)
+class AlgorithmArtifact:
     digest: str
     type_name: str
     format_version: int
@@ -81,6 +92,8 @@ class FederationAlgorithm(Protocol):
         self,
         *,
         inputs: list[AlgorithmInput],
+        base_release_id: str | None,
+        base_artifacts: list[AlgorithmArtifact],
         config: dict[str, Any],
         state: dict[str, Any],
         round_id: str,
@@ -111,6 +124,8 @@ def run_isolated_algorithm(
     plugin_version: str,
     *,
     inputs: list[AlgorithmInput],
+    base_release_id: str | None,
+    base_artifacts: list[AlgorithmArtifact],
     config: dict[str, Any],
     state: dict[str, Any],
     round_id: str,
@@ -136,6 +151,22 @@ def run_isolated_algorithm(
                     "content_path": str(path),
                 }
             )
+        base_dir = root / "base"
+        base_dir.mkdir()
+        request_base_artifacts = []
+        for index, item in enumerate(base_artifacts):
+            path = base_dir / str(index)
+            path.write_bytes(item.content)
+            request_base_artifacts.append(
+                {
+                    "digest": item.digest,
+                    "type_name": item.type_name,
+                    "format_version": item.format_version,
+                    "media_type": item.media_type,
+                    "metadata": item.metadata,
+                    "content_path": str(path),
+                }
+            )
         request_path = root / "request.json"
         result_path = root / "result.json"
         request_path.write_text(
@@ -144,6 +175,8 @@ def run_isolated_algorithm(
                     "plugin_id": plugin_id,
                     "plugin_version": plugin_version,
                     "round_id": round_id,
+                    "base_release_id": base_release_id,
+                    "base_artifacts": request_base_artifacts,
                     "config": config,
                     "state": state,
                     "inputs": request_inputs,
@@ -234,8 +267,26 @@ def execute_run_algorithm(
                 content=content,
             )
         )
+    base_release_id = str(intent.base_release_id) if intent.base_release_id else None
+    base_artifacts = []
+    for row in db.get_algorithm_base(job["app_id"], job["federation_id"], base_release_id):
+        content = artifacts.read_bytes(row["storage_key"], row["size_bytes"])
+        if "sha256:" + hashlib.sha256(content).hexdigest() != row["digest"]:
+            raise AlgorithmError("federation algorithm base artifact failed digest verification")
+        base_artifacts.append(
+            AlgorithmArtifact(
+                digest=row["digest"],
+                type_name=row["type_name"],
+                format_version=row["format_version"],
+                media_type=row["media_type"],
+                metadata=row["metadata"],
+                content=content,
+            )
+        )
     kwargs = {
         "inputs": inputs,
+        "base_release_id": base_release_id,
+        "base_artifacts": base_artifacts,
         "config": job.get("algorithm_config") or {},
         "state": job.get("algorithm_state") or {},
         "round_id": intent.round_id,

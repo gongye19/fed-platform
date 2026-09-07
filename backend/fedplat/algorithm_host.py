@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-from fedplat.federation_algorithm import AlgorithmInput, AlgorithmResult, load_algorithm
+from fedplat.federation_algorithm import AlgorithmArtifact, AlgorithmInput, AlgorithmResult, load_algorithm
 
 
 def main() -> None:
@@ -29,8 +29,21 @@ def main() -> None:
         )
         for item in request["inputs"]
     ]
+    base_artifacts = [
+        AlgorithmArtifact(
+            digest=item["digest"],
+            type_name=item["type_name"],
+            format_version=int(item["format_version"]),
+            media_type=item["media_type"],
+            metadata=item["metadata"],
+            content=Path(item["content_path"]).read_bytes(),
+        )
+        for item in request["base_artifacts"]
+    ]
     result = plugin.run(
         inputs=inputs,
+        base_release_id=request["base_release_id"],
+        base_artifacts=base_artifacts,
         config=request["config"],
         state=request["state"],
         round_id=request["round_id"],

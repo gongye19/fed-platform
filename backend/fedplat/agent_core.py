@@ -185,6 +185,7 @@ def run_agent_core(job: dict[str, Any]) -> AgentDecision:
                 **job["state"],
                 "last_generation_round": job["payload"]["round_id"],
                 "last_generation_submission_ids": job["payload"]["submission_ids"],
+                "last_generation_base_release_id": job["payload"].get("base_release_id"),
             },
             intents=[AgentIntent(kind="run_algorithm", payload=job["payload"])],
             evidence={"policy": "explicit-generation-request"},

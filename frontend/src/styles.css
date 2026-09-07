@@ -290,6 +290,7 @@ td small { margin-top: 4px; }
 .batch-option { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 9px; min-height: 52px; padding: 8px; color: var(--ink); border: 1px solid transparent; border-radius: var(--radius-sm); cursor: pointer; content-visibility: auto; contain-intrinsic-size: auto 52px; transition: background 150ms ease-out, border-color 150ms ease-out; }
 .batch-option:hover { background: rgba(255, 255, 255, .025); }
 .batch-option.selected { background: rgba(94, 106, 210, .08); border-color: rgba(123, 134, 235, .26); }
+.batch-option:has(input:disabled) { opacity: .5; cursor: default; }
 .batch-option input, .delivery-targets input { width: 15px; min-height: auto; accent-color: var(--accent); }
 .batch-option > span { display: grid; gap: 3px; min-width: 0; }
 .batch-option strong { overflow: hidden; font-size: 13px; font-weight: 540; text-overflow: ellipsis; white-space: nowrap; }
@@ -297,6 +298,7 @@ td small { margin-top: 4px; }
 .distribution-panel > .section-head { min-height: 64px; padding: 14px 18px; }
 .distribution-body { display: grid; gap: 12px; padding: 12px 18px; align-content: start; }
 .release-options, .delivery-targets { margin: 0; padding: 0; border: 0; }
+.contribution-panel > .release-options { padding: 12px 18px; border-bottom: 1px solid var(--line); }
 .release-options legend, .delivery-targets legend { width: 100%; padding: 0 0 10px; color: var(--muted); font-size: 10px; font-weight: 520; }
 .release-options__list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; max-height: 240px; overflow-y: auto; }
 .release-option { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: center; gap: 8px; min-height: 40px; padding: 6px 10px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; }
@@ -315,9 +317,10 @@ td small { margin-top: 4px; }
 .distribution-panel .version-panel__action { min-height: 56px; padding: 10px 18px; }
 .version-table__scroll { overflow-x: auto; overscroll-behavior-inline: contain; }
 .version-table table { min-width: 760px; }
-.version-table th:nth-child(1) { width: 22%; }
-.version-table th:nth-child(2) { width: 24%; }
-.version-table th:nth-child(3) { width: auto; }
+.version-table th:nth-child(1) { width: 18%; }
+.version-table th:nth-child(2) { width: 20%; }
+.version-table th:nth-child(3) { width: 22%; }
+.version-table th:nth-child(4) { width: auto; }
 .version-table tbody tr { content-visibility: auto; contain-intrinsic-size: auto 48px; }
 
 .dialog { width: min(680px, calc(100vw - 28px)); max-height: calc(100dvh - 40px); padding: 0; overflow: auto; overscroll-behavior: contain; color: var(--ink); background: var(--surface-1); border: 1px solid var(--line-strong); border-radius: var(--radius-md); box-shadow: 0 24px 80px rgba(0, 0, 0, .55); }

@@ -100,7 +100,7 @@ Application 中重复，但它们在主键、外键、查询和对象存储路�
 | `artifact_lineage` | 新 Artifact 由哪些输入 Artifact 产生 | 父子必须在同一 app/federation |
 | `submissions` | 哪个 Site 在何时提交了哪个 Artifact、站点内上传顺序 | 按 Site 的 idempotency key 与上传顺序唯一 |
 | `tasks` | Task 类型、目标 Site、输入引用、当前状态 | 必须关联有效 Membership |
-| `releases` | 不可变发布头、内部创建序号、生成任务、创建时间 | 属于一个 app/federation；生成任务至多产生一个版本 |
+| `releases` | 不可变发布头、可选基础版本、内部创建序号、生成任务、创建时间 | 属于一个 app/federation；生成任务至多产生一个版本 |
 | `release_inputs` | 每个 Release 精确使用的 Submission 及顺序 | Release 与 Submission 多对多 |
 | `release_artifacts` | Release 包含的 Artifact 快照 | 只允许同作用域 Artifact |
 | `deliveries` | Release 实际下发到哪些 Site、下发时间与当前状态 | `(release_id, site_id)` 唯一；点击下发时才创建 |
@@ -248,7 +248,7 @@ agent_jobs              唤醒对应 FederationAgent
 
 ### 创建 Release
 
-Agent 生成成功后，同一事务写入不可变 `releases`、`release_inputs` 和 `release_artifacts`；此时不预设目标站点。
+Agent 生成成功后，同一事务写入不可变 `releases`、`release_inputs` 和 `release_artifacts`；此时不预设目标站点。`base_release_id` 记录直接继承的版本，`release_inputs` 只记录本次新增输入，二者共同形成完整谱系。
 管理员可以从任意站点的任意贡献批次组合生成版本，也可以把任意版本下发给任意有接收权限的站点。
 点击下发时才为实际目标写入 `deliveries` 和 `commands`。任何目标越权或 Artifact 跨作用域，整个事务失败。
 
