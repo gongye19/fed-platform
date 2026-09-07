@@ -10,6 +10,7 @@ from fedplat.agent_core import (
     DeepSeekHarnessCore,
     DeepSeekHarnessCoreConfig,
     default_agent_binding,
+    _parse_decision,
     validate_core_config,
     run_agent_core,
 )
@@ -70,6 +71,17 @@ def test_agent_core_configuration_and_state_are_bounded():
         validate_core_config("unknown", {})
     with pytest.raises(AgentCoreError, match="max_state_bytes"):
         validate_core_config("deepseek-harness", {"memory": {"max_state_bytes": 1}})
+
+
+def test_agent_decision_normalizes_non_object_state_and_evidence():
+    decision = _parse_decision(
+        '{"new_state":"running","intents":[],"evidence":[{"source":"model"}]}',
+        1024,
+        fallback_state={"kept": True},
+    )
+
+    assert decision.new_state == {"kept": True}
+    assert decision.evidence == {"items": [{"source": "model"}]}
 
 
 def test_explicit_generation_request_runs_the_domain_algorithm_without_llm():

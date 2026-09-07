@@ -165,7 +165,11 @@ class DeepSeekHarnessCore:
 
         if result.finish_reason not in {None, "completed"}:
             raise AgentCoreError(f"DeepSeek Harness turn ended with {result.finish_reason}")
-        return _parse_decision(result.final_response, config.memory.max_state_bytes)
+        return _parse_decision(
+            result.final_response,
+            config.memory.max_state_bytes,
+            fallback_state=job["state"],
+        )
 
 
 def run_agent_core(job: dict[str, Any]) -> AgentDecision:
@@ -198,7 +202,9 @@ def run_agent_core(job: dict[str, Any]) -> AgentDecision:
     return ManualCore().handle(job, config)
 
 
-def _parse_decision(raw: str, max_state_bytes: int) -> AgentDecision:
+def _parse_decision(
+    raw: str, max_state_bytes: int, fallback_state: dict[str, Any] | None = None
+) -> AgentDecision:
     text = raw.strip()
     if text.startswith("```") and text.endswith("```"):
         lines = text.splitlines()
@@ -206,8 +212,15 @@ def _parse_decision(raw: str, max_state_bytes: int) -> AgentDecision:
     if len(text.encode()) > MAX_DECISION_BYTES:
         raise AgentCoreError("agent decision is too large")
     try:
-        decision = AgentDecision.model_validate(json.loads(text))
-    except (json.JSONDecodeError, ValidationError) as exc:
+        payload = json.loads(text)
+        if not isinstance(payload, dict):
+            raise ValueError("decision must be an object")
+        if not isinstance(payload.get("new_state"), dict):
+            payload["new_state"] = fallback_state or {}
+        if not isinstance(payload.get("evidence"), dict):
+            payload["evidence"] = {"items": payload.get("evidence")}
+        decision = AgentDecision.model_validate(payload)
+    except (json.JSONDecodeError, ValidationError, ValueError) as exc:
         raise AgentCoreError("agent returned an invalid decision") from exc
     if len(json.dumps(decision.new_state, separators=(",", ":"), ensure_ascii=False).encode()) > max_state_bytes:
         raise AgentCoreError("agent state exceeds configured limit")
