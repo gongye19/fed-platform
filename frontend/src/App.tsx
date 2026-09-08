@@ -603,10 +603,10 @@ function VersionManagement({ appId, federationId, topology, submissions, release
   onRefresh: () => Promise<void>;
 }) {
   const visibleReleases = latestReleaseInstances(releases);
-  const [selectedId, setSelectedId] = useState(visibleReleases[0]?.release_id || "");
+  const [selectedId, setSelectedId] = useState("");
   const contributions = submissions.filter((item) => item.purpose === "contribution" && item.status === "accepted");
   const inheritedInputs = releaseLineageInputIds(releases, visibleReleases[0]?.release_id || "");
-  const [selectedInputs, setSelectedInputs] = useState<string[]>(() => contributions.filter((item) => !inheritedInputs.has(item.submission_id)).map((item) => item.submission_id));
+  const [selectedInputs, setSelectedInputs] = useState<string[]>([]);
   const selectedInputSet = new Set(selectedInputs);
   const [selectedSites, setSelectedSites] = useState<string[]>([]);
   const [busy, setBusy] = useState<"generate" | "distribute" | "">("");
@@ -619,9 +619,7 @@ function VersionManagement({ appId, federationId, topology, submissions, release
   const codes = applicationCodes(topology.memberships, submissions, releases);
 
   useEffect(() => {
-    if (!selectedId || !visibleReleases.some((release) => release.release_id === selectedId)) {
-      setSelectedId(visibleReleases[0]?.release_id || "");
-    }
+    if (selectedId && !visibleReleases.some((release) => release.release_id === selectedId)) setSelectedId("");
   }, [releases, selectedId]);
   useEffect(() => { setSelectedSites([]); }, [selectedId]);
 
@@ -643,9 +641,8 @@ function VersionManagement({ appId, federationId, topology, submissions, release
         job = await api<AgentJob>(`${base}/agent/jobs/${requested.job_id}`);
       }
       if (job.status !== "succeeded") throw new Error(job.last_error || "联邦 Agent 生成超时");
-      const release = await api<{ release_id: string }>(`${base}/releases/generate`, { method: "POST", body: JSON.stringify({ generation_job_id: requested.job_id }) });
+      await api<{ release_id: string }>(`${base}/releases/generate`, { method: "POST", body: JSON.stringify({ generation_job_id: requested.job_id }) });
       await onRefresh();
-      setSelectedId(release.release_id);
       setSelectedInputs([]);
       setMessage({ tone: "success", text: "新的联邦版本已生成。" });
     } catch (reason) {
