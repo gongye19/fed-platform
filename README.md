@@ -9,6 +9,7 @@
 - 管理前端设计：[CONSOLE.md](./CONSOLE.md)
 - 数据库与数据保存：[DATABASE.md](./DATABASE.md)
 - Railway 托管部署与迁移：[DEPLOYMENT.md](./DEPLOYMENT.md)
+- 当前目标、架构、流程与进展：[docs/](./docs/)
 
 ## 代码状态
 
